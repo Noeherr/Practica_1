@@ -1,0 +1,150 @@
+---
+title: "Modelos de distribución de probabilidad"
+output: html_notebook
+---
+
+```{r, echo=FALSE, warning=FALSE}
+library(PASWR2)
+datos <- CHIPS
+library(tidyverse)
+library(lattice)
+library(ggplot2)
+```
+# Actividad 1
+histograma de todas las filas de la variable number
+```{r}
+hist(datos$number)
+```
+
+```{r}
+boxplot(datos$number, horizontal=TRUE)
+stripchart(datos, method="jitter", add=TRUE, col="red")
+```
+Crea dos conjuntos de datos diferentes
+```{r}
+datosI <- datos[datos$method=="techniqueI",]
+datosII <- datos[datos$method=="techniqueII",]
+ggplot(datos, aes(sample = number)) + stat_qq() + facet_grid(. ~ method)
+```
+
+# Actividad 2
+calcular media y desviación típica
+```{r}
+mediaI <- mean(datosI$number)
+desv_estI <- sd(datosI$number)
+mediaII <- mean(datosII$number)
+desv_estII <- sd(datosII$number)
+```   
+probabilidad de que una placa de silicio techniqueI tenga más de 390 chips
+```{r, warning=FALSE}
+library(tidyverse)
+pnorm(390, mediaI, desv_estI)
+probabilidad <- 1-pnorm(390, mediaI, desv_estI)
+print(probabilidad)
+
+sec <- seq(-4, 4, length = 100) * desv_estI + mediaI
+normal <- dnorm(sec, mediaI, desv_estI)
+
+normal %>% 
+  as.data.frame() %>% 
+  rename(valor = ".") %>% 
+  ggplot() +
+  aes(sec, valor) +
+  geom_line() +
+  theme(axis.text.y = element_blank()) +
+  xlab("Número de chips") +
+  ylab("") +
+  ggtitle("Distribución normal") +
+  geom_area(aes(x = ifelse(sec > 390, sec, 0)), fill = "blue") +
+  xlim(min(sec), max(sec))
+```
+
+probabilidad de que una placa de silicio techniqueII tenga menos de 150 chips
+```{r}
+pnorm(150, mediaII, desv_estII)
+
+sec <- seq(-4, 4, length = 100) * desv_estII + mediaII
+normal <- dnorm(sec, mediaII, desv_estII)
+
+normal %>% 
+  as.data.frame() %>% 
+  rename(valor = ".") %>% 
+  ggplot() +
+  aes(sec, valor) +
+  geom_line() +
+  theme(axis.text.y = element_blank()) +
+  xlab("Número de chips") +
+  ylab("") +
+  ggtitle("Distribución normal") +
+  geom_area(aes(x = ifelse(sec < 150, sec, 0)), fill = "blue") +
+  xlim(min(sec), max(sec))
+```
+
+número máximo de chips utilizables del 3% de las placas de silicio techniqueII del tipo B que tienen menos chips utilizables
+```{r}
+qnorm(p = 0.03,  mean = mediaII, sd = desv_estII, lower.tail = TRUE)
+```
+
+# Actividad 3
+Calcula la probabilidad de que en un lote de 10 placas de silicio, no haya ninguna defectuosa. Distribución binomial.
+```{r}
+p=1-pnorm(150, mediaII, desv_estII)
+pbinom(9, 10, p, lower.tail = FALSE)
+
+```
+Probabilidad de que sean necesarias examinar 10 placas de silicio para que aparezca la primera placa de silicio defectuosa. Distribución geométrica.
+```{r}
+v <- pnorm(150, mediaII, desv_estII)
+dgeom(9, v)
+
+```
+
+Probabilidad de que al tomar una muestra sin reposición de 6 placas de silicio al menos una sea defectuosa. Distribución hipergeométrica.
+```{r}
+phyper(0, 3, 27, 6, lower.tail = FALSE)
+```
+# Actividad 4
+Se fabrican 3.000 placas de silicio cada día. El número de placas de silicio defectuosas por día sigue una distribución de Poisson. Tomemos 3 como ese promedio de placas de silicio defectuosas cada día.
+
+Cuál es la probabilidad de que un día se produzcan más de 5 placas de silicio defectuosas
+```{r}
+ppois(5, 3, lower.tail=FALSE)
+```
+Cuál es la probabilidad de que un día no salga ninguna placa de silicio defectuosa de la fábrica
+```{r}
+ppois(0,3)
+```
+La fábrica funciona de lunes a viernes. ¿Qué distribución sigue el número de placas de silicio defectuosas por semana? Justifica qué propiedad se aplica.
+Como la distribución de Poisson es discreta, la probabilidad acumulada se calcula sumando las correspondintes probabilidades de la función de masa de probabilidad. 
+$$
+P(3)+P(3)+P(3)+P(3)+P(3)=P(15)
+$$
+# Actividad 5
+Quieren  diseñar una placa de silicio cuya duración siga una distribución de Weibull con parámetros a=9 y b=382.
+
+Realiza una simulación de la producción semanal de placas de silicio.
+```{r}
+set.seed(1)
+curve(dweibull (x, 9,382), 
+    main = 'Distribución de Weibull', 
+    xlim = c(0,500),
+    ylab = 'Densidad', 
+    lwd = 2,  
+    col = 'blue') 
+```
+
+Con este nuevo proceso, ¿se mejora realmente la duración media de las placas de silicio?
+```{r}
+v <- rweibull(15000, 9, 382)
+if (mean(v) > mean(mediaII))
+print("se mejora la media de chips")
+
+```
+
+
+Calcula la proporción de placas de silicio defectuosas que producirá probablemente el nuevo proceso y compárala con el anterior (la  que calculamos en la actividad 2)
+```{r}
+if (pweibull(150,9,382)< pnorm(150, mediaII, desv_estII))
+  print ("La proporción de placas defectuosas con el nuevo método es menor")
+```
+
