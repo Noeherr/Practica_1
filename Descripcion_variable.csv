@@ -1,0 +1,13 @@
+Nombre de variable	Descripción de variable
+person_age	Edad (años)
+person_income	Ingresos personales
+personhomeownership	Relación con la propiedad de la vivienda
+personemplength	Duración de la persona trabajando años)
+loan_intent	Motivo del préstamo
+loan_grade	Clasificación del prestamo en base al histórico crediticio, la calidad de la garantía y de la cantidad solicitada
+loan_amnt	Importe del préstamo ($)
+loanintrate	Tasa de interés del préstamo
+loan_status	Estado del préstamo
+loanpercentincome	Porcentaje del préstamo sobre los ingresos
+cbpersondefaultonfile	Falta de pago de un préstamo antiguo
+cbpresoncredhistlength	Lapso de tiempo desde el anterior préstamo (años)
