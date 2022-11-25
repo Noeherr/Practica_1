@@ -1,0 +1,73 @@
+---
+title: "Modelos de distribución de probabilidad"
+author: "Noelia Herranz - David Rodríguez"
+date: xx/1/2023
+output:
+  html_document:
+    number_sections: yes
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: true
+      smooth_scroll: false
+    self_contained: yes  
+---
+
+# Liberías utilizadas en R
+
+```{r}
+
+library(dplyr)
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+
+
+```
+
+
+
+
+```{r}
+
+df <-read.csv("credit_risk_dataset.csv", header = TRUE)
+
+#Este csv es una prueba, ya tengo uno con variable y descripción
+des <-read.csv("vble.csv", header = TRUE)
+
+```
+
+# Definición de objetivos
+
+XXXXXXXXXXX
+
+
+
+Gráfico de la variable dependiente
+
+No sale bien....
+
+```{r setup, }
+
+
+ggplot(df, aes(x = 1:nrow(df), y = loan_amnt))
+
+
+```
+
+
+
+# Análisis exploratorio de datos
+
+
+
+Tabla de variables
+
+
+```{r}
+des %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
