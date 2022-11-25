@@ -10,7 +10,7 @@ output:
     toc_float:
       collapsed: true
       smooth_scroll: false
-    self_contained: yes  
+    self_contained: yes   
 ---
 
 # Liberías utilizadas en R
@@ -33,7 +33,8 @@ library(ggplot2)
 df <-read.csv("credit_risk_dataset.csv", header = TRUE)
 
 #Este csv es una prueba, ya tengo uno con variable y descripción
-des <-read.csv("vble.csv", header = TRUE)
+des <-read.csv("Descripcion_variable.csv", header = TRUE, fileEncoding = "Latin1", check.names = F,sep=";")
+
 
 ```
 
@@ -43,7 +44,7 @@ XXXXXXXXXXX
 
 
 
-Gráfico de la variable dependiente
+Gráfico de la variable dependiente 
 
 No sale bien....
 
@@ -61,7 +62,7 @@ ggplot(df, aes(x = 1:nrow(df), y = loan_amnt))
 
 
 
-Tabla de variables
+Tabla de variables 
 
 
 ```{r}
@@ -70,4 +71,184 @@ des %>%
   kable_styling()
 
 ```
+ 
+Observamos que las variables (loan_grade), loan_status, son variables que se calculan en base al importe del prestamo, nuestra variable que queremos predecir por lo tanto no se podrán utilizar como variables independientes para calcular dicho importe. 
+ 
+¿Cuántos registros y variables tenemos?
 
+```{r}
+dim(df)
+
+```
+Un vistazo de los datos:
+
+```{r}
+str(df)
+
+```
+
+Observamos que las variables relación con la propiedad (person_home_ownership) y motivo de la utilidad de prestamo (loan_intent) que son factores y R las considera cadenas, las modificamos por factores:  
+
+
+
+```{r}
+df <- df %>%
+         mutate(person_home_ownership  = as.factor(person_home_ownership )) %>%
+         mutate(loan_intent  = as.factor(loan_intent ))
+```
+
+Confirmamos el cambio:
+
+
+```{r}
+str(df)
+
+```
+
+
+Modificamos el nombre de la variable independiente por target
+
+```{r}
+df=df %>% rename(target=loan_amnt  )
+```
+
+
+Generamos dos data frame, uno para entrenamiento (train) y otro para validación (validation)
+
+```{r}
+
+set.seed(1)
+
+#create ID variable
+df$id <- 1:nrow(df)
+
+#Use 70% of dataset as training set and remaining 30% as testing set 
+train <- df %>% dplyr::sample_frac(0.7)
+validacion  <- dplyr::anti_join(df, train, by = 'id')
+
+
+```
+
+
+```{r}
+dim(train)
+
+dim(validacion)
+
+```
+
+
+## Análisis univariante
+
+
+
+Análisis por variable --> Gráfico - Tabla con percentiles, medias, varianza, kurtosis, missing y comentarios al respecto
+
+
+```{r}
+summary(df$person_age)
+cuartiles <- quantile(df$person_age, probs = c(0.25, 0.50, 0.75), type = 6)
+cuartiles
+```
+
+
+
+```{r}
+
+# Representación gráfica
+p1 <- ggplot(aes(x = person_age), data = df) +
+ geom_histogram(color = 'blue',
+                fill = 'blue',
+                alpha = 0.2,
+                bins=30) +
+ labs(title = "Edad")
+
+p2 <- p1 + geom_vline(aes(xintercept = median(df$person_age),
+                  color = "mediana"),
+              linetype = "dashed",
+              size = 1) +
+   geom_vline(aes(xintercept = mean(df$person_age),
+                  color = "media"),
+              linetype = "dashed",
+              size = 1) +
+   geom_vline(
+     aes(xintercept = quantile(df$person_age, 0.25),
+         color = "cuantil_25"),
+     linetype = "dashed",
+     size = 1
+   ) +
+   geom_vline(
+     aes(xintercept = quantile(df$person_age, 0.75),
+         color = "cuantil_75"),
+     linetype = "dashed",
+     size = 1
+   ) +
+   scale_color_manual(
+     name = "statistics",
+     values = c(
+       mediana = "blue",
+       media = "red",
+       cuantil_25 = "black",
+       cuantil_75 = "orange"
+     )
+   ) +
+   xlab("Longitud") + ylab("n")
+
+
+p2
+```
+```{r}
+ggplot(data = df, aes(x = person_age)) +
+  geom_density(fill = "steelblue", alpha = 0.8) +
+  geom_rug(alpha = 0.1) +
+  scale_x_continuous(labels = scales::comma) +
+  labs(title = "Distribución original") +
+  theme_bw() 
+```
+
+
+```{r}
+
+
+```
+
+
+
+
+
+- person_home_ownership: destaca que el 50,5% de vive con una hipóteca y un 41,3% de alquiler.
+- loan_intent: está muy distribuida en los seis valores posibles que toma la variable, destacaría como la de mayor proporción Educacion, 19,9% 
+y como la de menor mejoras en el hogar, 11,1%.
+
+- loan_grade: NO SE PUEDE UTILIZAR
+
+- cb_person_default_on_file: un 17,6% de las personas tienen un historial fallido de prestamos
+
+## Análisis bivariable
+
+
+## Correlaciones
+
+## Análisis multiples
+
+
+
+
+
+```{r pressure, echo=TRUE}
+
+```
+
+
+
+# Versiones de los paquetes de R
+
+
+```{r}
+ sesion_info <- devtools::session_info()
+dplyr::select(
+  tibble::as_tibble(sesion_info$packages),
+  c(package, loadedversion, source)
+)
+
+```
