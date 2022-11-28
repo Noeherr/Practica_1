@@ -1,0 +1,246 @@
+---
+title: "Fundamentos"
+author: "Noelia Herranz - David Rodríguez"
+date: 15/1/2023
+output:
+  html_document:
+    number_sections: yes
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: true
+      smooth_scroll: false
+    self_contained: yes   
+---
+
+https://rpubs.com/rdelgado/429190
+https://rpubs.com/ReynaMOP/810659
+http://www.sthda.com/english/wiki/be-awesome-in-ggplot2-a-practical-guide-to-be-highly-effective-r-software-and-data-visualization
+
+
+# Liberías utilizadas en R
+
+```{r}
+
+library(dplyr)
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+
+
+```
+
+
+Lectura del fichero de datos a modelar y de la descripción de las variables:
+
+```{r}
+
+df <-read.csv("credit_risk_dataset.csv", header = TRUE)
+df <- df %>% dplyr::sample_frac(0.2)
+
+#Este csv es una prueba, ya tengo uno con variable y descripción
+des <-read.csv("Descripcion_variable.csv", header = TRUE, fileEncoding = "Latin1", check.names = F,sep=";")
+
+
+```
+
+# Definición de objetivos
+
+XXXXXXXXXXX
+
+
+
+Gráfico de la variable dependiente 
+
+```{r setup, }
+
+ggplot(df, aes(x = loan_amnt)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+```
+
+
+# Análisis exploratorio de datos
+
+
+
+Tabla de variables 
+
+
+```{r}
+des %>%
+  kbl() %>%
+  kable_styling()
+
+```
+ 
+Observamos que las variables (loan_grade), loan_status, son variables que se calculan en base al importe del prestamo, nuestra variable que queremos predecir por lo tanto no se podrán utilizar como variables independientes para calcular dicho importe. 
+ 
+¿Cuántos registros y variables tenemos?
+
+```{r}
+dim(df)
+
+```
+Un vistazo rápdio de los datos:
+
+```{r}
+str(df)
+
+```
+
+Observamos que las variables relación con la propiedad (person_home_ownership) y motivo de la utilidad de prestamo (loan_intent) que son factores y R las considera cadenas, las modificamos por factores:  
+
+
+
+```{r}
+df <- df %>%
+         mutate(person_home_ownership  = as.factor(person_home_ownership )) %>%
+         mutate(loan_intent  = as.factor(loan_intent )) %>%
+         mutate(cb_person_default_on_file=as.factor(cb_person_default_on_file))
+```
+
+Confirmamos el cambio:
+
+
+```{r}
+str(df$loan_grade)
+str(df$person_home_ownership)
+str(df$cb_person_default_on_file)
+```
+
+
+Modificamos el nombre de la variable independiente por target
+
+```{r}
+#df=df %>% rename(target=loan_amnt  )
+```
+
+
+Generamos dos data frame, uno para entrenamiento (train) y otro para validación (validation)
+
+```{r}
+
+set.seed(1)
+
+#create ID variable
+df$id <- 1:nrow(df)
+
+#Use 70% of dataset as training set and remaining 30% as testing set 
+train <- df %>% dplyr::sample_frac(0.7)
+validacion  <- dplyr::anti_join(df, train, by = 'id')
+
+
+```
+
+
+```{r}
+dim(train)
+
+dim(validacion)
+
+```
+
+
+## Análisis univariante
+
+
+
+Análisis por variable --> Gráfico - Tabla con percentiles, medias, varianza, kurtosis, missing y comentarios al respecto
+
+
+
+```{r}
+summary_table <- df %>%                                        # begin with linelist, save out as new object
+  summarise(                                                         # only the below summary columns will be returned
+    cases       = format(n(),big.mark = ","),                                                # number of rows per group
+    min   = min(loan_amnt, na.rm = T),                    # max delay
+    q01   = quantile(loan_amnt,c(0.25) ),
+    q02   = quantile(loan_amnt,c(0.25) ),
+    q05   = quantile(loan_amnt,c(0.25) ),
+    
+    q25   = quantile(loan_amnt,c(0.25) ),                 # max delay
+    mean  = round(mean(loan_amnt, na.rm=T), digits = 1),  # mean delay, rounded
+    median  = round(median(loan_amnt, na.rm=T), digits = 1),  # mean delay, rounded
+    max   = max(loan_amnt, na.rm = T),                    # max delay
+    sd    = round(sd(loan_amnt, na.rm = T), digits = 1),  # standard deviation of delays, rounded
+    missing         = sum(is.na(person_age),digits = 1)-1,
+    pct_missing = scales::percent(missing / n()),
+    valor_0     = sum(loan_amnt = 0, na.rm = T),               # number of rows with delay of 3 or more days
+    pct_valor_0 = scales::percent(valor_0 / n())   
+    )
+
+```
+
+
+```{r}
+summary_table %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+
+
+```{r}
+ggplot(data = df, aes(x = loan_grade)) + 
+  geom_bar(color = 'darkslategray', fill = 'steelblue') + 
+  xlab("Número de Velocidades") + 
+  ylab("Cantidades") + 
+  ggtitle("Gráfico de Barras") +
+  coord_flip()+
+  geom_text(stat='count',aes(label=..count..), vjust=-0.5, size=3) 
+
+```
+```{r}
+ggplot(df, aes(x=loan_grade)) +
+  geom_bar(aes(y = (..count..)/sum(..count..))) + 
+  scale_y_continuous(labels = percent)
+```
+
+
+```{r}
+ggplot(data = df, aes(x = loan_grade)) + 
+  geom_bar(aes(y=(..count..)/sum(..count..), color = 'darkslategray', fill = 'steelblue') + 
+  xlab("Número de Velocidades") + 
+  ylab("Cantidades") + 
+  ggtitle("Gráfico de Barras") +
+  coord_flip()+
+  geom_text(stat='count',aes(label=..count..), vjust=-0.5, size=3) 
+
+```
+
+
+
+
+
+- person_home_ownership: destaca que el 50,5% de vive con una hipóteca y un 41,3% de alquiler.
+- loan_intent: está muy distribuida en los seis valores posibles que toma la variable, destacaría como la de mayor proporción Educacion, 19,9% 
+y como la de menor mejoras en el hogar, 11,1%.
+
+- loan_grade: NO SE PUEDE UTILIZAR
+
+- cb_person_default_on_file: un 17,6% de las personas tienen un historial fallido de prestamos
+
+## Análisis bivariable
+
+
+## Correlaciones
+
+## Análisis multiples
+
+
+
+
+
+# Versiones de los paquetes de R
+
+```{r}
+ sesion_info <- devtools::session_info()
+dplyr::select(
+  tibble::as_tibble(sesion_info$packages),
+  c(package, loadedversion, source)
+)
+
+```
+
