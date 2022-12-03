@@ -36,7 +36,7 @@ Lectura del fichero de datos a modelar y de la descripción de las variables:
 ```{r}
 
 df <-read.csv("credit_risk_dataset.csv", header = TRUE)
-df <- df %>% dplyr::sample_frac(0.2)
+df <- df %>% dplyr::sample_frac(0.1)
 
 #Este csv es una prueba, ya tengo uno con variable y descripción
 des <-read.csv("Descripcion_variable.csv", header = TRUE, fileEncoding = "Latin1", check.names = F,sep=";")
@@ -100,12 +100,13 @@ df <- df %>%
          mutate(cb_person_default_on_file=as.factor(cb_person_default_on_file))
 ```
 
+
 Confirmamos el cambio:
 
 
 ```{r}
-str(df$loan_grade)
 str(df$person_home_ownership)
+str(df$loan_intent)
 str(df$cb_person_default_on_file)
 ```
 
@@ -151,25 +152,76 @@ Análisis por variable --> Gráfico - Tabla con percentiles, medias, varianza, k
 
 
 ```{r}
-summary_table <- df %>%                                        # begin with linelist, save out as new object
-  summarise(                                                         # only the below summary columns will be returned
+summary_table <- df %>%                                        
+  summarise(
     cases       = format(n(),big.mark = ","),                                                # number of rows per group
-    min   = min(loan_amnt, na.rm = T),                    # max delay
-    q01   = quantile(loan_amnt,c(0.25) ),
-    q02   = quantile(loan_amnt,c(0.25) ),
-    q05   = quantile(loan_amnt,c(0.25) ),
+    min   = min(loan_amnt, na.rm = T),                    
+    q01   = quantile(loan_amnt,c(0.01) ),
+    q02   = quantile(loan_amnt,c(0.02) ),
+    q03   = quantile(loan_amnt,c(0.03) ),  
+    q05   = quantile(loan_amnt,c(0.05) ),
+    q10   = quantile(loan_amnt,c(0.10) ),
+    q20   = quantile(loan_amnt,c(0.20) ),
+               
+    mean  = round(mean(loan_amnt, na.rm=T), digits = 1),  
+    median  = round(median(loan_amnt, na.rm=T), digits = 1),  
     
-    q25   = quantile(loan_amnt,c(0.25) ),                 # max delay
-    mean  = round(mean(loan_amnt, na.rm=T), digits = 1),  # mean delay, rounded
-    median  = round(median(loan_amnt, na.rm=T), digits = 1),  # mean delay, rounded
-    max   = max(loan_amnt, na.rm = T),                    # max delay
-    sd    = round(sd(loan_amnt, na.rm = T), digits = 1),  # standard deviation of delays, rounded
+    q80   = quantile(loan_amnt,c(0.80) ), 
+    q90   = quantile(loan_amnt,c(0.90) ), 
+    q95   = quantile(loan_amnt,c(0.95) ), 
+
+    q98   = quantile(loan_amnt,c(0.97) ),
+    q98   = quantile(loan_amnt,c(0.98) ),
+    q99   = quantile(loan_amnt,c(0.99) ),  
+    
+    max   = max(loan_amnt, na.rm = T),                    
+    sd    = round(sd(loan_amnt, na.rm = T), digits = 1),  
     missing         = sum(is.na(person_age),digits = 1)-1,
     pct_missing = scales::percent(missing / n()),
-    valor_0     = sum(loan_amnt = 0, na.rm = T),               # number of rows with delay of 3 or more days
+    valor_0     = sum(loan_amnt = 0, na.rm = T),               
     pct_valor_0 = scales::percent(valor_0 / n())   
     )
 
+```
+
+
+```{r}
+summary_table2 <- df %>%                                        
+  summarise(
+    sd    = round(sd(loan_amnt, na.rm = T), digits = 1),  
+    missing         = sum(is.na(person_age),digits = 1)-1,
+    pct_missing = scales::percent(missing / n()),
+    valor_0     = sum(loan_amnt = 0, na.rm = T),               
+    pct_valor_0 = scales::percent(valor_0 / n())   
+    )
+
+```
+
+
+
+
+
+
+```{r}
+aa <-function(dataframe,variable) {
+  
+  tabla2 <- dataframe %>%                                        
+  summarise(
+    sd    = round(sd(variable, na.rm = T), digits = 1),  
+    missing         = sum(is.na(variable),digits = 1)-1,
+    pct_missing = scales::percent(missing / n()),
+    valor_0     = sum(variable = 0, na.rm = T),               
+    pct_valor_0 = scales::percent(valor_0 / n())   
+    )  
+  return(tabla2)
+  
+}
+
+```
+
+```{r}
+
+#aa(df,loan_amnt)
 ```
 
 
@@ -179,6 +231,12 @@ summary_table %>%
   kable_styling()
 ```
 
+
+```{r}
+summary_table2 %>%
+  kbl() %>%
+  kable_styling()
+```
 
 
 
@@ -192,23 +250,9 @@ ggplot(data = df, aes(x = loan_grade)) +
   geom_text(stat='count',aes(label=..count..), vjust=-0.5, size=3) 
 
 ```
-```{r}
-ggplot(df, aes(x=loan_grade)) +
-  geom_bar(aes(y = (..count..)/sum(..count..))) + 
-  scale_y_continuous(labels = percent)
-```
 
 
-```{r}
-ggplot(data = df, aes(x = loan_grade)) + 
-  geom_bar(aes(y=(..count..)/sum(..count..), color = 'darkslategray', fill = 'steelblue') + 
-  xlab("Número de Velocidades") + 
-  ylab("Cantidades") + 
-  ggtitle("Gráfico de Barras") +
-  coord_flip()+
-  geom_text(stat='count',aes(label=..count..), vjust=-0.5, size=3) 
 
-```
 
 
 
