@@ -20,12 +20,13 @@ http://www.sthda.com/english/wiki/be-awesome-in-ggplot2-a-practical-guide-to-be-
 
 # Liberías utilizadas en R
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 
 library(dplyr)
 library(tidyverse)
 library(kableExtra)
 library(ggplot2)
+library(cowplot)
 
 
 ```
@@ -52,10 +53,13 @@ XXXXXXXXXXX
 
 Gráfico de la variable dependiente 
 
-```{r setup, }
+```{r setup }
 
-ggplot(df, aes(x = loan_amnt)) +
+a1=ggplot(df, aes(x = loan_amnt)) +
   geom_density(color="darkblue", fill="lightblue")
+
+plot_grid(a1, a1,
+          nrow=2, ncol = 1)
 
 ```
 
@@ -64,7 +68,7 @@ ggplot(df, aes(x = loan_amnt)) +
 
 
 
-Tabla de variables 
+Tabla de variables,xxxxxxxxxxxx
 
 
 ```{r}
@@ -92,7 +96,6 @@ str(df)
 Observamos que las variables relación con la propiedad (person_home_ownership) y motivo de la utilidad de prestamo (loan_intent) que son factores y R las considera cadenas, las modificamos por factores:  
 
 
-
 ```{r}
 df <- df %>%
          mutate(person_home_ownership  = as.factor(person_home_ownership )) %>%
@@ -105,9 +108,7 @@ Confirmamos el cambio:
 
 
 ```{r}
-str(df$person_home_ownership)
-str(df$loan_intent)
-str(df$cb_person_default_on_file)
+str(df)
 ```
 
 
@@ -145,100 +146,98 @@ dim(validacion)
 
 ## Análisis univariante
 
+Antes de comenzar a analizar las variables definimos unas funciones en R para facilitar el código del análisis
 
+
+```{r}
+
+describe_v1 <-function(dataframe,variable) {
+
+  tabla1 <- dataframe %>%  
+                                
+  summarise(
+    cases       = format(n(),big.mark = ","),                                               
+    min   = format(min({{variable}}, na.rm = T),big.mark = ","),                    
+    q01   = format(quantile({{variable}},c(0.01) ),big.mark = ","),
+    #q02   = quantile({{variable}},c(0.02) ),
+    q03   = format(quantile({{variable}},c(0.03) ),big.mark = ","),  
+    q05   = format(quantile({{variable}},c(0.05) ),big.mark = ","),
+    q10   = format(quantile({{variable}},c(0.10) ),big.mark = ","),
+    mean  = format(round(mean({{variable}}, na.rm=T), digits = 1),big.mark = ","),  
+    median  = format(round(median({{variable}}, na.rm=T), digits = 1),big.mark = ","),  
+    
+    q90   = format(quantile({{variable}},c(0.90) ),big.mark = ","), 
+    q95   = format(quantile({{variable}},c(0.95) ),big.mark = ","), 
+
+    q97   = format(quantile({{variable}},c(0.97) ),big.mark = ","),
+    #q98   = quantile({{variable}},c(0.98) ),
+    q99   = format(quantile({{variable}},c(0.99) ),big.mark = ","),  
+    
+    max   = format(max({{variable}}, na.rm = T),big.mark = ","),                    
+    
+    #sd    = format(round(sd({{variable}}, na.rm = T), digits = 1),big.mark = ","),  
+    #missing         = sum(is.na({{variable}}),digits = 1)-1,
+    #pct_missing = scales::percent(missing / n()) ,
+    #valor_0     = sum({{variable}} == 0, na.rm = T),               
+    #pct_valor_0 = scales::percent(valor_0 / n())       
+    )
+ 
+
+  return(tabla1)
+}
+
+```
+
+
+```{r echo=FALSE} 
+describe_v2 <-function(dataframe,variable) {
+  
+  tabla2 <- dataframe %>%                                        
+  summarise(
+    sd    = format(round(sd({{variable}}, na.rm = T), digits = 1),big.mark = ","),  
+    missing         = sum(is.na({{variable}}),digits = 1)-1,
+    pct_missing = scales::percent(missing / n()) ,
+    valor_0     = sum({{variable}} == 0, na.rm = T),               
+    pct_valor_0 = scales::percent(valor_0 / n())   
+    )  
+
+  return(tabla2)
+}
+
+
+
+```
+
+
+función para los gráficos numéricas y categóricas
+
+
+### Variable dependiente 
+
+
+des1=describe_v1(df,loan_amnt)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+
+des2=describe_v2(df,loan_amnt)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+
+### Variables numéricas 
 
 Análisis por variable --> Gráfico - Tabla con percentiles, medias, varianza, kurtosis, missing y comentarios al respecto
 
 
 
-```{r}
-summary_table <- df %>%                                        
-  summarise(
-    cases       = format(n(),big.mark = ","),                                                # number of rows per group
-    min   = min(loan_amnt, na.rm = T),                    
-    q01   = quantile(loan_amnt,c(0.01) ),
-    q02   = quantile(loan_amnt,c(0.02) ),
-    q03   = quantile(loan_amnt,c(0.03) ),  
-    q05   = quantile(loan_amnt,c(0.05) ),
-    q10   = quantile(loan_amnt,c(0.10) ),
-    q20   = quantile(loan_amnt,c(0.20) ),
-               
-    mean  = round(mean(loan_amnt, na.rm=T), digits = 1),  
-    median  = round(median(loan_amnt, na.rm=T), digits = 1),  
-    
-    q80   = quantile(loan_amnt,c(0.80) ), 
-    q90   = quantile(loan_amnt,c(0.90) ), 
-    q95   = quantile(loan_amnt,c(0.95) ), 
 
-    q98   = quantile(loan_amnt,c(0.97) ),
-    q98   = quantile(loan_amnt,c(0.98) ),
-    q99   = quantile(loan_amnt,c(0.99) ),  
-    
-    max   = max(loan_amnt, na.rm = T),                    
-    sd    = round(sd(loan_amnt, na.rm = T), digits = 1),  
-    missing         = sum(is.na(person_age),digits = 1)-1,
-    pct_missing = scales::percent(missing / n()),
-    valor_0     = sum(loan_amnt = 0, na.rm = T),               
-    pct_valor_0 = scales::percent(valor_0 / n())   
-    )
+### Variables categóricas
 
-```
-
-
-```{r}
-summary_table2 <- df %>%                                        
-  summarise(
-    sd    = round(sd(loan_amnt, na.rm = T), digits = 1),  
-    missing         = sum(is.na(person_age),digits = 1)-1,
-    pct_missing = scales::percent(missing / n()),
-    valor_0     = sum(loan_amnt = 0, na.rm = T),               
-    pct_valor_0 = scales::percent(valor_0 / n())   
-    )
-
-```
-
-
-
-
-
-
-```{r}
-aa <-function(dataframe,variable) {
-  
-  tabla2 <- dataframe %>%                                        
-  summarise(
-    sd    = round(sd(variable, na.rm = T), digits = 1),  
-    missing         = sum(is.na(variable),digits = 1)-1,
-    pct_missing = scales::percent(missing / n()),
-    valor_0     = sum(variable = 0, na.rm = T),               
-    pct_valor_0 = scales::percent(valor_0 / n())   
-    )  
-  return(tabla2)
-  
-}
-
-```
-
-```{r}
-
-#aa(df,loan_amnt)
-```
-
-
-```{r}
-summary_table %>%
-  kbl() %>%
-  kable_styling()
-```
-
-
-```{r}
-summary_table2 %>%
-  kbl() %>%
-  kable_styling()
-```
-
-
+https://plotnine.readthedocs.io/en/stable/tutorials/miscellaneous-show-counts-and-percentages-for-bar-plots.html
 
 ```{r}
 ggplot(data = df, aes(x = loan_grade)) + 
@@ -250,7 +249,7 @@ ggplot(data = df, aes(x = loan_grade)) +
   geom_text(stat='count',aes(label=..count..), vjust=-0.5, size=3) 
 
 ```
-
+https://plotnine.readthedocs.io/en/stable/tutorials/miscellaneous-show-counts-and-percentages-for-bar-plots.html
 
 
 
@@ -271,10 +270,42 @@ y como la de menor mejoras en el hogar, 11,1%.
 
 ## Correlaciones
 
+
+```{r}
+corr_matrix <- df %>% select_if(is.numeric) %>% 
+  cor(method="pearson", use="pairwise.complete.obs")
+```
+
+
+```{r}
+#install.packages("ggcorrplot")
+
+
+ggcorrplot(corr_matrix, 
+           hc.order = TRUE, 
+           type = "lower",
+           lab = TRUE)
+```
+
+```{r}
+installl.PACK
+library(GGally)
+library(ggplot2)
+ggpairs(corr_matrix,  title = "Bivariate analysis of revenue expenditure by the British household", 
+    lower = list(continuous = wrap("smooth",
+        alpha = 0.3,
+        size = 0.1))
+    )
+```
+
+
+
+
+
 ## Análisis multiples
 
 
-
+## Missing
 
 
 # Versiones de los paquetes de R
