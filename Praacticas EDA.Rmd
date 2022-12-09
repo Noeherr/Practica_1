@@ -13,6 +13,8 @@ output:
     self_contained: yes   
 ---
 
+
+
 https://rpubs.com/rdelgado/429190
 https://rpubs.com/ReynaMOP/810659
 http://www.sthda.com/english/wiki/be-awesome-in-ggplot2-a-practical-guide-to-be-highly-effective-r-software-and-data-visualization
@@ -27,6 +29,9 @@ library(tidyverse)
 library(kableExtra)
 library(ggplot2)
 library(cowplot)
+if (!require(nortest)) {install.packages("nortest")}
+if (!require(moments)) {install.packages("moments")}
+library(moments)
 
 
 ```
@@ -40,7 +45,7 @@ df <-read.csv("credit_risk_dataset.csv", header = TRUE)
 df <- df %>% dplyr::sample_frac(0.1)
 
 #Este csv es una prueba, ya tengo uno con variable y descripción
-des <-read.csv("Descripcion_variable.csv", header = TRUE, fileEncoding = "Latin1", check.names = F,sep=";")
+descripcion_variables <-read.csv("Descripcion_variable.csv", header = TRUE, fileEncoding = "Latin1", check.names = F,sep=";")
 
 
 ```
@@ -72,7 +77,7 @@ Tabla de variables,xxxxxxxxxxxx
 
 
 ```{r}
-des %>%
+descripcion_variables %>%
   kbl() %>%
   kable_styling()
 
@@ -86,6 +91,7 @@ Observamos que las variables (loan_grade), loan_status, son variables que se cal
 dim(df)
 
 ```
+
 Un vistazo rápdio de los datos:
 
 ```{r}
@@ -158,28 +164,21 @@ describe_v1 <-function(dataframe,variable) {
   summarise(
     cases       = format(n(),big.mark = ","),                                               
     min   = format(min({{variable}}, na.rm = T),big.mark = ","),                    
-    q01   = format(quantile({{variable}},c(0.01) ),big.mark = ","),
-    #q02   = quantile({{variable}},c(0.02) ),
-    q03   = format(quantile({{variable}},c(0.03) ),big.mark = ","),  
-    q05   = format(quantile({{variable}},c(0.05) ),big.mark = ","),
-    q10   = format(quantile({{variable}},c(0.10) ),big.mark = ","),
+    q01   = format(quantile({{variable}},c(0.01), na.rm = T ),big.mark = ","),
+    q03   = format(quantile({{variable}},c(0.03), na.rm = T ),big.mark = ","),  
+    q05   = format(quantile({{variable}},c(0.05), na.rm = T ),big.mark = ","),
+    q10   = format(quantile({{variable}},c(0.10), na.rm = T ),big.mark = ","),
+    
     mean  = format(round(mean({{variable}}, na.rm=T), digits = 1),big.mark = ","),  
     median  = format(round(median({{variable}}, na.rm=T), digits = 1),big.mark = ","),  
     
-    q90   = format(quantile({{variable}},c(0.90) ),big.mark = ","), 
-    q95   = format(quantile({{variable}},c(0.95) ),big.mark = ","), 
-
-    q97   = format(quantile({{variable}},c(0.97) ),big.mark = ","),
-    #q98   = quantile({{variable}},c(0.98) ),
-    q99   = format(quantile({{variable}},c(0.99) ),big.mark = ","),  
+    q90   = format(quantile({{variable}},c(0.90), na.rm = T ),big.mark = ","), 
+    q95   = format(quantile({{variable}},c(0.95), na.rm = T ),big.mark = ","), 
+    q97   = format(quantile({{variable}},c(0.97), na.rm = T ),big.mark = ","),
+    q99   = format(quantile({{variable}},c(0.99), na.rm = T ),big.mark = ","),  
     
     max   = format(max({{variable}}, na.rm = T),big.mark = ","),                    
-    
-    #sd    = format(round(sd({{variable}}, na.rm = T), digits = 1),big.mark = ","),  
-    #missing         = sum(is.na({{variable}}),digits = 1)-1,
-    #pct_missing = scales::percent(missing / n()) ,
-    #valor_0     = sum({{variable}} == 0, na.rm = T),               
-    #pct_valor_0 = scales::percent(valor_0 / n())       
+ 
     )
  
 
@@ -189,11 +188,13 @@ describe_v1 <-function(dataframe,variable) {
 ```
 
 
-```{r echo=FALSE} 
+```{r} 
 describe_v2 <-function(dataframe,variable) {
   
   tabla2 <- dataframe %>%                                        
   summarise(
+    sesgo    = format(round(skewness({{variable}}, na.rm = T), digits = 1),big.mark = ","),
+    curtosis    = format(round(kurtosis({{variable}}, na.rm = T), digits = 1),big.mark = ","),
     sd    = format(round(sd({{variable}}, na.rm = T), digits = 1),big.mark = ","),  
     missing         = sum(is.na({{variable}}),digits = 1)-1,
     pct_missing = scales::percent(missing / n()) ,
@@ -209,37 +210,309 @@ describe_v2 <-function(dataframe,variable) {
 ```
 
 
+```{r}
+
+grafico_numerico2 <-function(dataframe,variable) {
+    mean_vble  = round(mean(dataframe$variable, na.rm=T), digits = 1)
+    return(mean_vble)
+}
+#v=grafico_numerico2(df,loan_amnt)
+```
+
+```{r}
+
+grafico_numerico <-function(dataframe,variable) {
+
+      #mean_vble  = round(mean(dataframe$variable, na.rm=T), digits = 1)
+      
+      fill <- "#4271AE"
+      line <- "#1F3552"
+      
+      b3 <- ggplot(dataframe, aes({{variable}})) +
+              geom_density(fill = fill, colour = line) +
+              #geom_vline(xintercept = mean_vble, size = 1, colour = "#FF3721",linetype = "dashed")+
+             theme(plot.title = element_text(hjust = 0.5))
+      
+      return(b3)
+}
+```
+
+
+
+```{r}
+
+grafico_categoricas <-function(dataframe,variable,titulo,eje_y) {
+
+      #mean_vble  = round(mean(dataframe$variable, na.rm=T), digits = 1)
+      
+      fill <- "#4271AE"
+      line <- "#1F3552"
+      
+      b3 <- ggplot(data = dataframe, aes(x = {{variable}})) + 
+            geom_bar(color = 'darkslategray', fill = 'steelblue') + 
+            xlab(eje_y) + 
+            ylab("Cantidades") + 
+            ggtitle(titulo) +
+            coord_flip()+
+            geom_text(stat='count',aes(label=..count..), vjust=-0.5, size=3) 
+      
+      return(b3)
+}
+
+
+```
+
+
+
+```{r}
+
+## FALLA ESTA FUNCION....ARREGLAR 
+
+test_normalidad <-function(dataframe,variable){
+  
+  anderson<-ad.test(dataframe$variable)
+  cramer<-cvm.test(dataframe$variable)
+  lillies<-lillie.test(dataframe$variable)
+  shapiro.francia<-sf.test(dataframe$variable)
+  
+  ## Salida a pantalla 
+ print(anderson)
+ print(cramer)
+ print(lillies)
+ print(shapiro.francia)
+}
+
+
+#test_normalidad(df,loan_amnt)
+```
+
+
+```{r}
+library(nortest)
+
+test_normalidad <-function(dataframe,variable) {
+  print(dataframe$variable)
+   lillie.test(dataframe$variable)
+
+}
+
+#test_normalidad(df,loan_amnt)  
+```
+
+
+
+
+
+
+```{r}
+G1=grafico_numerico(df,loan_amnt)
+G1
+```
+
+
 función para los gráficos numéricas y categóricas
 
 
 ### Variable dependiente 
 
 
+
+```{r }
 des1=describe_v1(df,loan_amnt)
     
   des1 %>%
   kbl() %>%
   kable_styling()
+```
 
 
+```{r }
 des2=describe_v2(df,loan_amnt)
     
   des2 %>%
   kbl() %>%
   kable_styling()
 
+```
+
+
+
+
 ### Variables numéricas 
 
 Análisis por variable --> Gráfico - Tabla con percentiles, medias, varianza, kurtosis, missing y comentarios al respecto
 
 
+**Edad (en años9) --person_age**	
+
+
+```{r}
+G1=grafico_numerico(df,person_age)
+G1
+
+```
+
+```{r}
+###Test de normalidad
+```
+
+
+
+```{r }
+des1=describe_v1(df,person_age)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(df,person_age)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+**person_income**
+
+
+
+```{r}
+G1=grafico_numerico(df,person_income)
+G1
+
+```
+
+```{r}
+###Test de normalidad
+```
+
+```{r }
+des1=describe_v1(df,person_income)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(df,person_income)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+**person_emp_length**
+
+
+
+```{r}
+G1=grafico_numerico(df,person_emp_length)
+G1
+
+```
+
+```{r}
+###Test de normalidad
+```
+
+
+
+```{r }
+
+des1=describe_v1(df,person_emp_length)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(df,person_emp_length)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+loan_int_rate
+
+```{r}
+G1=grafico_numerico(df,loan_int_rate)
+G1
+
+```
+
+```{r}
+###Test de normalidad
+```
+
+```{r }
+des1=describe_v1(df,loan_int_rate)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(df,loan_int_rate)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+cb_person_cred_hist_length
+
+
+
+```{r}
+G1=grafico_numerico(df,cb_person_cred_hist_length)
+G1
+
+```
+
+```{r}
+###Test de normalidad
+```
+
+```{r }
+des1=describe_v1(df,cb_person_cred_hist_length)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(df,cb_person_cred_hist_length)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
 
 
 ### Variables categóricas
 
-https://plotnine.readthedocs.io/en/stable/tutorials/miscellaneous-show-counts-and-percentages-for-bar-plots.html
 
-```{r}
 ggplot(data = df, aes(x = loan_grade)) + 
   geom_bar(color = 'darkslategray', fill = 'steelblue') + 
   xlab("Número de Velocidades") + 
@@ -248,12 +521,34 @@ ggplot(data = df, aes(x = loan_grade)) +
   coord_flip()+
   geom_text(stat='count',aes(label=..count..), vjust=-0.5, size=3) 
 
-```
+
 https://plotnine.readthedocs.io/en/stable/tutorials/miscellaneous-show-counts-and-percentages-for-bar-plots.html
 
 
+**person_home_ownership**
 
 
+
+```{r}
+grafico_categoricas(df,person_home_ownership,"título","ddddd")
+```
+
+
+**loan_intent**
+
+
+```{r}
+grafico_categoricas(df,loan_intent,"título","ddddd")
+```
+
+
+**cb_person_default_on_file**
+
+
+
+```{r}
+grafico_categoricas(df,cb_person_default_on_file,"título","ddddd")
+```
 
 
 
@@ -281,21 +576,20 @@ corr_matrix <- df %>% select_if(is.numeric) %>%
 #install.packages("ggcorrplot")
 
 
-ggcorrplot(corr_matrix, 
-           hc.order = TRUE, 
-           type = "lower",
-           lab = TRUE)
+#ggcorrplot(corr_matrix, 
+    #       hc.order = TRUE, 
+     #      type = "lower",
+      #     lab = TRUE)
 ```
 
 ```{r}
-installl.PACK
-library(GGally)
-library(ggplot2)
-ggpairs(corr_matrix,  title = "Bivariate analysis of revenue expenditure by the British household", 
-    lower = list(continuous = wrap("smooth",
-        alpha = 0.3,
-        size = 0.1))
-    )
+#library(GGally)
+#library(ggplot2)
+#ggpairs(corr_matrix,  title = "Bivariate analysis of revenue expenditure by the British household", 
+ #   lower = list(continuous = wrap("smooth",
+  #      alpha = 0.3,
+   #     size = 0.1))
+   # )
 ```
 
 
