@@ -16,7 +16,7 @@ output:
 
 
 https://rpubs.com/rdelgado/429190
-https://rpubs.com/ReynaMOP/810659
+
 http://www.sthda.com/english/wiki/be-awesome-in-ggplot2-a-practical-guide-to-be-highly-effective-r-software-and-data-visualization
 
 
@@ -263,6 +263,61 @@ grafico_categoricas <-function(dataframe,variable,titulo,eje_y) {
 ```
 
 
+```{r}
+
+grafico_categoricas_biv <-function(dataframe,variable) {
+
+
+b1=ggplot(dataframe) + 
+        geom_density(aes(x = loan_amnt, fill = {{variable}}), position = 'stack') + 
+        xlab("Importe") + 
+        ylab("Frecuencia") + 
+        ggtitle("Importe de prestamo") +
+        theme_minimal()
+
+      return(b1)
+}
+```
+
+
+
+
+```{r}
+grafico_categoricas_biv2 <-function(dataframe,variable) {
+  
+    p1 <- df %>% select(loan_amnt, {{variable}}) %>%
+      na.omit() %>%
+      ggplot(aes(x={{variable}}, y=loan_amnt, fill={{variable}})) +
+      geom_boxplot()+
+      theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+    
+    return(p1)
+}
+```
+
+
+```{r}
+grafico_categoricas_biv2 <-function(dataframe,variable) {
+  
+    b1= ggplot(data = dataframe, aes(x = loan_amnt, y = {{variable}})) + 
+      geom_point(aes(color = {{variable}}), size = 1, alpha = 0.7) +
+      geom_smooth(aes(color = {{variable}})) +
+      facet_grid({{variable}} ~., scales = 'free') +
+      xlab('Puntuación de la Audiencia') + 
+      ylab('Puntuación de la Crítica') +
+      ggtitle('Relación entre gusto de la Audiencia y la Crítica') + 
+      theme_minimal()
+    
+      return(b1)
+}
+```
+
+```{r}
+grafico_categoricas_biv2(df,loan_intent)
+```
+
+
 
 ```{r}
 
@@ -340,7 +395,7 @@ des2=describe_v2(df,loan_amnt)
 
 ### Variables numéricas 
 
-Análisis por variable --> Gráfico - Tabla con percentiles, medias, varianza, kurtosis, missing y comentarios al respecto
+Análisis por variable --> Gráfico - Tabla con percentiles, medias, varianza, kurtosis, missing, test de normalidad --> comentarios al respecto
 
 
 **Edad (en años9) --person_age**	
@@ -375,7 +430,10 @@ des2=describe_v2(df,person_age)
   kbl() %>%
   kable_styling()
 ```
+```{r}
 
+df %>% select(person_age) %>% filter(person_age>75)
+```
 
 **person_income**
 
@@ -446,7 +504,7 @@ des2=describe_v2(df,person_emp_length)
 ```
 
 
-loan_int_rate
+**loan_int_rate**
 
 ```{r}
 G1=grafico_numerico(df,loan_int_rate)
@@ -477,7 +535,7 @@ des2=describe_v2(df,loan_int_rate)
 ```
 
 
-cb_person_cred_hist_length
+**cb_person_cred_hist_length**
 
 
 
@@ -556,47 +614,49 @@ grafico_categoricas(df,cb_person_default_on_file,"título","ddddd")
 - loan_intent: está muy distribuida en los seis valores posibles que toma la variable, destacaría como la de mayor proporción Educacion, 19,9% 
 y como la de menor mejoras en el hogar, 11,1%.
 
-- loan_grade: NO SE PUEDE UTILIZAR
+
 
 - cb_person_default_on_file: un 17,6% de las personas tienen un historial fallido de prestamos
 
 ## Análisis bivariable
 
 
+```{r}
+a=grafico_categoricas_biv(df,loan_intent)
+a
+grafico_categoricas_biv2(df,loan_intent)
+```
+
+```{r}
+a=grafico_categoricas_biv(df,person_home_ownership)
+a
+grafico_categoricas_biv2(df,person_home_ownership)
+```
+
+```{r}
+a=grafico_categoricas_biv(df,cb_person_default_on_file)
+a
+grafico_categoricas_biv2(df,cb_person_default_on_file)
+```
+
 ## Correlaciones
 
 
 ```{r}
+
+temp2 <-df %>% select_if(is.numeric) %>% 
+  select(-c(loan_status,loan_percent_income)) 
+
+ggpairs(temp2 )
+```
+
+
+```{r}
 corr_matrix <- df %>% select_if(is.numeric) %>% 
+  select(-c(loan_status,loan_percent_income)) %>%
   cor(method="pearson", use="pairwise.complete.obs")
+corr_matrix
 ```
-
-
-```{r}
-#install.packages("ggcorrplot")
-
-
-#ggcorrplot(corr_matrix, 
-    #       hc.order = TRUE, 
-     #      type = "lower",
-      #     lab = TRUE)
-```
-
-```{r}
-#library(GGally)
-#library(ggplot2)
-#ggpairs(corr_matrix,  title = "Bivariate analysis of revenue expenditure by the British household", 
- #   lower = list(continuous = wrap("smooth",
-  #      alpha = 0.3,
-   #     size = 0.1))
-   # )
-```
-
-
-
-
-
-## Análisis multiples
 
 
 ## Missing
