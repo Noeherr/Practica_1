@@ -15,6 +15,20 @@ output:
 
 
 
+Rúbrica
+1.	Uso de herramienta/s de control de versiones (1 punto)
+2.	Definición de objetivos (1 punto)
+3.	Análisis exploratorio inicial (1 punto)
+4.	Detección, tratamiento e imputación de datos faltantes (1 punto)
+5.	Transformaciones de variables cuantitativas (1 punto)
+6.	Procesado de variables cualitativas (1 punto)
+7.	Selección de variables (1 punto)
+8.	Ajuste, interpretación y diagnosis del modelo de regresión lineal múltiple (2 puntos)
+9.	Valoración del profesor (1 punto)
+
+
+
+
 https://rpubs.com/rdelgado/429190
 
 http://www.sthda.com/english/wiki/be-awesome-in-ggplot2-a-practical-guide-to-be-highly-effective-r-software-and-data-visualization
@@ -32,7 +46,9 @@ library(cowplot)
 if (!require(nortest)) {install.packages("nortest")}
 if (!require(moments)) {install.packages("moments")}
 library(moments)
-
+library("GGally")
+if (!require(VIM)) {install.packages("VIM")}
+library(VIM)
 
 ```
 
@@ -92,7 +108,15 @@ dim(df)
 
 ```
 
-Un vistazo rápdio de los datos:
+
+Un vistazo resumen de los datos:
+
+```{r}
+head(df)
+```
+
+
+Otro vistazo resumen de los datos:
 
 ```{r}
 str(df)
@@ -225,8 +249,8 @@ grafico_numerico <-function(dataframe,variable) {
 
       #mean_vble  = round(mean(dataframe$variable, na.rm=T), digits = 1)
       
-      fill <- "#4271AE"
-      line <- "#1F3552"
+        fill <- "#4271AE"
+        line <- "#1F3552"
       
       b3 <- ggplot(dataframe, aes({{variable}})) +
               geom_density(fill = fill, colour = line) +
@@ -236,6 +260,8 @@ grafico_numerico <-function(dataframe,variable) {
       return(b3)
 }
 ```
+
+
 
 
 
@@ -298,7 +324,7 @@ grafico_categoricas_biv2 <-function(dataframe,variable) {
 
 
 ```{r}
-grafico_categoricas_biv2 <-function(dataframe,variable) {
+grafico_categoricas_biv3 <-function(dataframe,variable) {
   
     b1= ggplot(data = dataframe, aes(x = loan_amnt, y = {{variable}})) + 
       geom_point(aes(color = {{variable}}), size = 1, alpha = 0.7) +
@@ -314,9 +340,8 @@ grafico_categoricas_biv2 <-function(dataframe,variable) {
 ```
 
 ```{r}
-grafico_categoricas_biv2(df,loan_intent)
+#grafico_categoricas_biv2(df,loan_intent)
 ```
-
 
 
 ```{r}
@@ -343,6 +368,8 @@ test_normalidad <-function(dataframe,variable){
 
 
 ```{r}
+
+## FALLA ESTA FUNCION....ARREGLAR ...es una funcion de apoyo de la de arriba
 library(nortest)
 
 test_normalidad <-function(dataframe,variable) {
@@ -353,9 +380,6 @@ test_normalidad <-function(dataframe,variable) {
 
 #test_normalidad(df,loan_amnt)  
 ```
-
-
-
 
 
 
@@ -371,6 +395,10 @@ función para los gráficos numéricas y categóricas
 ### Variable dependiente 
 
 
+```{r}
+G1=grafico_numerico(df,loan_amnt)
+G1
+```
 
 ```{r }
 des1=describe_v1(df,loan_amnt)
@@ -624,7 +652,7 @@ y como la de menor mejoras en el hogar, 11,1%.
 ```{r}
 a=grafico_categoricas_biv(df,loan_intent)
 a
-grafico_categoricas_biv2(df,loan_intent)
+#grafico_categoricas_biv2(df,loan_intent)
 ```
 
 ```{r}
@@ -632,6 +660,10 @@ a=grafico_categoricas_biv(df,person_home_ownership)
 a
 grafico_categoricas_biv2(df,person_home_ownership)
 ```
+
+
+
+
 
 ```{r}
 a=grafico_categoricas_biv(df,cb_person_default_on_file)
@@ -645,7 +677,7 @@ grafico_categoricas_biv2(df,cb_person_default_on_file)
 ```{r}
 
 temp2 <-df %>% select_if(is.numeric) %>% 
-  select(-c(loan_status,loan_percent_income)) 
+  select(-c(loan_status,loan_percent_income,id)) 
 
 ggpairs(temp2 )
 ```
@@ -660,6 +692,42 @@ corr_matrix
 
 
 ## Missing
+
+```{r}
+
+aggr_plot <- aggr(df, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE,
+                  labels=names(df), cex.axis=.4, gap=3, 
+                  ylab=c("Histogram of missing data","Pattern"))
+
+
+```
+
+Hacemos un gráfico de las dos variables que tienen missing para ver si encontramos algún patrón, a priori por lo que represetan las dos variables no debería de haber ninguna relación, pero quién sabe!!
+
+
+```{r}
+df %>% select(loan_int_rate, person_emp_length) %>% marginplot()
+```
+```{r}
+df %>% select(loan_int_rate, loan_amnt) %>% marginplot()
+```
+Correción de missing 
+
+
+
+
+# Regresión
+
+## Regresión simple
+
+Una prueba de regresión simple con la variable de mayor correlación con la variable dependinte y la interpretación de coficieentes
+
+## Regresión multiple
+
+Regresión multiple y selección de variables con métodos de stepwise...
+
+
+
 
 
 # Versiones de los paquetes de R
