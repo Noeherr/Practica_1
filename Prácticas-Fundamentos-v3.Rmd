@@ -86,6 +86,8 @@ library(lmtest)
 Lectura del fichero de datos y de la descripción de las variables:
 
 ```{r}
+set.seed(1)
+
 setwd("C:/David/Estadística/Master/Analisis de Fundamentos/R/Practica/")
 
 
@@ -161,7 +163,10 @@ dim(validacion)
 ```
 
 
-Antes de comenzar a analizar las variables definimos unas funciones en R para facilitar el código del análisis
+Antes de comenzar a analizar las variables definimos unas funciones en R para facilitar el código del análisis.
+
+Aunque hay multiples paquetes con resumenes estadísticos, generamos uno adaptado y así "jugamos" un poco con R.
+El matiz es que no encontramos ninguno que tenga el porcentaje de ceros por variab.
 
 ```{r}
 
@@ -347,10 +352,6 @@ grafico_categoricas_biv3 <-function(dataframe,variable) {
 }
 ```
 
-```{r}
-#grafico_categoricas_biv2(train, loan_intent)
-```
-
 
 ```{r}
 
@@ -368,12 +369,6 @@ test_normalidad <-function(df_var){
 
 }
 
-```
-
-
-```{r}
-#G1=grafico_numerico(train, target)
-#G1
 ```
 
 
@@ -658,29 +653,29 @@ grafico_categoricas_biv2(train,cb_person_default_on_file)
 ```
 
 
-**FALTAN CRUCES DE VARIABLES NUMÉRICAS (SCATTERPLOT) Y ALGÚN CRUCE MÁS**
-
 Sccater plot entre la variable dependiente, target y las independientes numéricas para ver relaciones
 
-```{r}
 
-plot( train$target, train$person_age )
-plot( train$target, train$person_income )
-plot( train$target, train$person_emp_length )
-plot( train$target, train$loan_int_rate )
-
-
-#Use loess (local fiting as smooth method)
-ggplot2.scatterplot(data=train, xName='wt',yName='mpg',
-            addRegLine=TRUE, regLineColor="blue",
-            addConfidenceInterval=TRUE, smoothingMethod="loess")
-
-
-ggplot(iris, aes(x=Petal.Length, y=Petal.Width)) +
+```{r, warning=FALSE}
+bi1=ggplot(train, aes(x=person_age, y=target)) +
   geom_point() +
   stat_smooth(method=lm)
 
+bi2=ggplot(train, aes(x=person_income, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi3=ggplot(train, aes(x=person_emp_length, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi4=ggplot(train, aes(x=loan_int_rate, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+plot_grid(bi1, bi2,bi3,bi4)
 ```
+
 
 
 A coninutación, se procede a realiazar la depuración que hemos visto en el EDA:
@@ -827,8 +822,7 @@ Utilizamos la librería bestNormalize que nos da la opción de sacar multiples t
     (orderNorm_obj_tar <- orderNorm(train$target))
      (BNobject_tar <- bestNormalize(train$target)) 
   
-    print(BNobject)
-    
+
     par(mfrow = c(2,2))
     MASS::truehist(arcsinh_obj_tar$x.t, main = "Arcsinh transformation", nbins = 12)
     MASS::truehist(boxcox_obj_tar$x, main = "Box Cox transformation", nbins = 12)
@@ -889,8 +883,7 @@ train$person_age_tr <- orderNorm_obj_age$x
     (orderNorm_obj_in <- orderNorm(train$person_income))
      (BNobject_in <- bestNormalize(train$person_income)) 
   
-    print(BNobject)
-    
+
     par(mfrow = c(2,2))
     MASS::truehist(arcsinh_obj_in$x.t, main = "Arcsinh transformation", nbins = 12)
     MASS::truehist(boxcox_obj_in$x, main = "Box Cox transformation", nbins = 12)
@@ -932,7 +925,7 @@ train$person_income_tr <- orderNorm_obj_in$x
 
 
 
-    str(train$person_emp_length)
+    #str(train$person_emp_length)
 ```
 
 
@@ -943,6 +936,32 @@ train$person_emp_length_tr <- sqrt_x_object_len$x
 
 ```
 
+
+
+
+
+
+
+```{r, warning=FALSE}
+bi1=ggplot(train, aes(x=person_age, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi2=ggplot(train, aes(x=person_income, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi3=ggplot(train, aes(x=person_emp_length, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi4=ggplot(train, aes(x=loan_int_rate, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+plot_grid(bi1, bi2,bi3,bi4)
+
+```
 
 
 
@@ -963,7 +982,7 @@ corr_matrix <- train %>% select_if(is.numeric) %>%
 
 ```{r,warning=FALSE}
 #square
-corrplot(corr_matrix, method = "pearson", shade.col = NA, tl.col = "black",
+corrplot(corr_matrix, method = "square", shade.col = NA, tl.col = "black",
          tl.srt = 35,  addCoef.col = "black", addcolorlabel = "no",
          order = "hclust", type = "upper", diag = F, addshade = "all")
 ```
@@ -975,26 +994,24 @@ Se obserava las correlaciones de valor 1 de las variables transformadas con las 
 
 ## Regresión simple
 
-Primero haremos una regresión simple con la variable de mayor correlación con la variable dependinte y la interpretación de coficientes.
+Primero haremos una regresión simple con la variable de mayor correlación con la variable dependiente (target ~  ingresos):
 
 ```{r}
-lm_fit <- lm(target~person_income, data=train)
+lm_fit <- lm(target_tr~person_income_tr, data=train)
 summary(lm_fit)
 
 ```
-En la información devuelta por el summary se observa que el p-value del estadístico F es muy pequeño, indicando que al menos uno de los predictores del modelo está significativamente relacionado con la variable respuesta. Al tratarse de un modelo simple, el p-value de estadístico F es el mismo que el p-value del estadístico t del único predictor incluido en el modelo (lstat). La evaluación del modelo en conjunto puede hacerse a partir de los valores RSE o del valor R2 devuelto en el summary.
 
-Residual standar error (RSE): En promedio, cualquier predicción del modelo se aleja 6.216 unidades del verdadero valor. Teniendo en cuenta que el valor promedio de la variable respuesta medv es de 22.53, RSE es de 6.21622.53=27%.
 
-R2: El predictor lstatus empleado en el modelo es capaz de explicar el 54.44% de la variabilidad observada en el precio de las viviendas.
+El p-valor del modelo es significativamente bajo, 2.2e-16, por lo que se puede aceptar que el modelo no es por azar. Por los parámetros, tanto el de la constante como el de ingresos tienen p-valores muy bajos también por lo que podemos rechazar la hipótesis nula. En cuanto al R cuadrado explica el 17,51% de la variabilidad de y.
 
-La ventaja de R2 es que es independiente de la escala en la que se mida la variable respuesta, por lo que su interpretación es más sencilla.
+Y el Residual standard error es de 5685., el coeficiente constante es 5.102e+03 y el de person_income_tr, 6.954e-02
 
-Los dos coeficientes de regresión (β0 y β1) estimados por el modelo son significativos y se pueden interpretar como:
+La interpretación de los coeficientes al ser muy bajos es dificil de interpretar, por lo que pondré otro modelo para explicar:
 
-Intercept(β0): El valor promedio del precio de la vivienda cuando el lstatus es 0 es de 34.5538 unidades.
-Predictor lstat(β1): por cada unidad que se incrementa el predictor lstat el precio de la vivienda disminuye en promedio 0.9500 unidades.
-La estimación de todo coeficiente de regresión tiene asociada un error estándar, por lo tanto todo coeficiente de regresión tiene su correspondiente intervalo de confianza
+importe_prestamo= 47,60 + 3,01 × ingresos
+
+En este ejemplo los coeficientes de regresión son 47,60, para la constante y 3,01 para ingresos y la interpretación es cuando aumentamos en una unidad en los ingresos, los prestamos aumentan en 3,01 unidades.
 
 ## Regresión multiple
 
@@ -1002,7 +1019,7 @@ La estimación de todo coeficiente de regresión tiene asociada un error estánd
 ### Métodos de selección de variables
 
 
-Para este apartado nos basaremos fielmente en el trabajo elaborado por Victo Aceña en noviembre de 2021.
+Para este apartado nos basaremos fielmente en el trabajo elaborado por Victor Aceña en noviembre de 2021.
 
 Usaremos el método Subset que consiste en generar todas las combinaciones de variables posibles y quedarse con el “mejor” subconjunto de ellas. Considerando mejor, el que obtenga una puntuación superior para alguna métrica de evaluación definida previamente.
 
@@ -1027,10 +1044,11 @@ reg_sum
 
 Para poder evaluar los modelos, podemos consultar los vectores de métricas almacenados mediante summary, por ejemplo el R cuadrado ajustado, el criterio de información de Akaike,Cp (AIC y criterio de información bayesiano, BIC .
 
+
+
 ```{r}
 reg_sum$adjr2
 reg_sum$bic
-reg_sum$Cp
 ```
 
 
@@ -1041,7 +1059,7 @@ for (metric in c("r2", "adjr2", "Cp", "bic")){plot(regfit_full, scale=metric)}
 
 ```
 
-Una vez se haya seleccionado uno de los modelos, se pueden obtener los coeficientes para cada una de las variables con la instrucicción coef.
+Una vez se haya seleccionado uno de los modelos, se pueden obtener los coeficientes para cada una de las variables con la instrucción coef.
 
 En este caso se seleccionaría el modelo primero es el que tendría el BIC más pequeño, aunque el R cuadrado ajustado no sea el mas alto, pero siempre tiene que primar que el modelo cuanto más simple mejor, principio de parsimonia. Recordamos que el R cuadrado (sin ajustar) no se tiene que ver para la regresión multiple, recordemos que este R, aumentará siempre y cuando metas más variables, por eso se usa el ajustado que penaliza el incluir variables. 
 
@@ -1068,7 +1086,7 @@ par ( mfrow =c(2 ,3) )
 plot(reg_sum$rss , xlab ="Number of Variables", ylab ="RSS ",type ="l")
 plot(reg_sum$adjr2 ,xlab ="Number of Variables",ylab ="Adjusted RSq", type ="l")
 plot(reg_sum$bic ,xlab ="Number of Variables",ylab ="BIC", type ="l")
-#plot(reg_sum$Cp ,xlab ="Number of Variables",ylab ="BIC", type ="l")
+
 ```
 
 
@@ -1079,54 +1097,31 @@ summary(modelo_final<-lm(target_tr~person_income_tr, train))
 ```
 
 Se vé que los contrastes de los parámetros de la constante y de los ingresos transformados se rechaza la hipótesis nula de que son nulos.
-Tiene un R cuadradro ajustado de 0.1688 (16,88%)
+Tiene un R cuadradro ajustado de 0.1751, es decir explica un 17,51% de la variación de la variable dependiente.
 
 #### Diagnóstico del modelo
 
+
+Realizamos el análisis de residuos del modelo final:
+
+
+
+Por test de normalidad y por gráfico vemos que los residuos son normales
+
+```{r}
+# Test de hipótesis para el análisis de normalidad de los residuos
+test_normalidad(modelo_final$residuals)
+```
+
+Una visión más amplia de los residuos:
 
 ```{r}
 par(mfrow=c(2,2))
 plot(modelo_final)
 ```
 
+Los residuos son de la comparacion de residuos y las estimaciones no tienen una forma de embudo que evidencian la homocedasticidad, pero no se ve una clara aleatoriedad.
 
-```{r}
-# Detección y visualización de observaciones influyentes
-
-influencePlot(modelo_final)
-
-```
-
-
-```{r}
-# Gráfico residuos estudentizados frente a valores ajustados por el modelo
-ggplot(data = train, aes(x = predict(modelo_final), 
-                        y = abs(rstudent(modelo_final))))+
-geom_hline(yintercept = 3, color = "grey", linetype = "dashed")+
-# se identifican en rojo las observaciones con residuos estandarizados absolutos > 3
-geom_point(aes(color = ifelse(abs(rstudent(modelo_final)) > 3, "red", "black")))+
-scale_color_identity()+
-labs(title = "Distribución de los residuos estudentizados", 
-     x = "Predicción modelo", 
-     y = "Residuos estudentizados")+
-theme_bw() + theme(plot.title = element_text(hjust = 0.5))
-```
-```{r}
-# Detección de los residuos estudentizados > 3 considerados como outliers
-#which(rstudent(modelo_final) > 3)
-```
-
-
-```{r}
-outlierTest(modelo_final)
-
-```
-
-
-```{r}
-# Test de hipótesis para el análisis de normalidad de los residuos
-test_normalidad(modelo_final$residuals)
-```
 
 
 Test de contraste de homocedasticidad Breusch-Pagan
@@ -1141,6 +1136,13 @@ bptest(modelo_final)
 Como el p-valor es pequeño entonces hay evidencias para rechazar la hipótesis nula de homocedasticidad.
 
 
+
+```{r}
+# Detección y visualización de observaciones influyentes
+
+influencePlot(modelo_final)
+
+```
 ¿Hay colinealidad?
 
 Al ser un modelo tan simple, no puede, pero para evaluarlo se calculan los factores de inlación de la varianza (VIF)
@@ -1165,11 +1167,6 @@ Es importante eliminar únicamente una variable en cada paso, ya que en caso con
 # Factores de inflación de la varianza......DARIA ERROR AL SOLO TENER UN TERMINO, UNA VARIALE INDEPENDIENTE
 #car::vif(modelo_final)
 ```
-
-
-
-## Validación de modelos
-
 
 
 ### Validación
