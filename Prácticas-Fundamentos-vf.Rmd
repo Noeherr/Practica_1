@@ -1,0 +1,1411 @@
+---
+title: "Fundamentos de Análisis de Datos"
+author: "Noelia Herranz - David Rodríguez"
+date: 14/1/2023
+output:
+  html_document: 
+    number_sections: yes
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: true
+      smooth_scroll: false
+    self_contained: yes   
+---
+ 
+
+
+```{r  include=FALSE, fig.align='center'}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Rúbrica de la asignatura
+
+*	Uso de herramienta/s de control de versiones (1 punto)
+*	Definición de objetivos (1 punto)
+*	Análisis exploratorio inicial (1 punto)
+*	Detección, tratamiento e imputación de datos faltantes (1 punto)
+*	Transformaciones de variables cuantitativas (1 punto)
+*	Procesado de variables cualitativas (1 punto)
+*	Selección de variables (1 punto)
+*	Ajuste, interpretación y diagnosis del modelo de regresión lineal múltiple (2 puntos)
+*	Valoración del profesor (1 punto)
+
+
+
+  
+# Definición de objetivos
+
+Disponemos de una tabla obtenida de Kaggle con información relativa a préstamos personales en EE.UU.. En esta tabla tenemos una variedad de campos tanto numéricos como categoricos que nos aportan a nivel de cliente y para un préstamo personal concreto, información previa a la solicitud del préstamo, edad, ingresos, tiempo trabajado de la persona, tipo de interés, importe y finalidad del préstamo,...y una vez finalizados los plazos de pago, se informa sí ha pagado el préstamo o no.
+
+En este trabajo la finalidad es realizar una regresión múltiple y seleccionaremos como variable dependiente el importe de préstamo, como es obvio es una variable numérica.
+
+Es un ejemplo un poco forzado, dado que, en la realidad, el cliente ya sabe la cantidad que solicita y en algunos casos, si la persona es cliente de la entidad que solicita el préstamo puede que la entidad tenga ya límites preconcedidos de préstamos.
+
+
+Como decíamos queremos realizar un modelo multivariante para poder estimar el importe del préstamo del cliente con la información disponible previa a la solicitud del préstamo, este matiz es importante, ya que habrá variables que no podamos utilizar porque son variables calculadas a posteriori de la solicitud del préstamo que son calculadas en base al importe del préstamo.
+
+Para todos los contrastes de hipóstesis del trabajo estableceremos un alfa de 0,05.
+
+# Librerías
+
+
+
+```{r, warning=FALSE, message=FALSE}
+
+#if (!require(nortest)) {install.packages("nortest")}
+#if (!require(moments)) {install.packages("moments")}
+#if (!require(corrplot)) {install.packages("corrplot")}
+#if (!require(VIM)) {install.packages("VIM")}
+#if (!require(bestNormalize)) {install.packages("bestNormalize")}
+#if (!require(leaps)) {install.packages("leaps")}
+#if (!require(lmtest)) {install.packages("lmtest")}
+
+
+
+library(dplyr)
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+library(cowplot)
+library(corrplot)
+library(moments)
+library(VIM)
+library(nortest)
+library(bestNormalize)
+library(leaps)
+library(lmtest) 
+
+
+
+```
+
+# Análisis exploratorio de datos
+
+Lectura del fichero de datos y de la descripción de las variables:
+
+```{r}
+
+#Fijamos una semilla para ser el análisis reproducible
+set.seed(1)
+
+#setwd("C:/David/Estadística/Master/Analisis de Fundamentos/R/Practica_1/")
+
+
+#df <- read.csv('~/máster/Practica_1/credit_risk_dataset.csv', header = TRUE)
+df <- read.csv('credit_risk_dataset.csv', header = TRUE)
+df <- df %>% dplyr::sample_frac(0.4)
+head(df)
+dim(df)
+```
+El dataset consta de 32581 observaciones y 12 variables que se describen a continuación, pero trabajaremos sobre una muestra del 40%, 13.032:
+```{r}
+
+# Nombre y descripción de variables
+#descripcion_variables <- read.csv("~/máster/Practica_1/Descripción de variables.csv", header = TRUE, 
+descripcion_variables <- read.csv("Descripcion_variables.csv", header = TRUE, fileEncoding = "Latin1", check.names = F,sep=";")
+descripcion_variables %>%
+  kbl() %>%
+  kable_styling()
+
+```
+ 
+Se observa que las variables clasificación del  préstamo (loan_grade), estado del préstamo (loan_status) y porcentaje del préstamo sobre los ingresos (loan_percent_income), son variables que se calculan en base al importe del préstamo, nuestra variable que queremos predecir por lo tanto no se podrán utilizar como variables independientes. 
+ 
+Codificación de las variables
+
+```{r}
+str(df)
+```
+
+Se observa que las variables relación con la propiedad (person_home_ownership), motivo del préstamo (loan_intent) y falta de pago de un préstamo antiguo (cb_person_default_on_file) R las considera cadenas, por lo que modificamos el tipo a factor:  
+
+
+```{r}
+df <- df %>%
+         mutate(person_home_ownership  = as.factor(person_home_ownership )) %>%
+         mutate(loan_intent  = as.factor(loan_intent )) %>%
+         mutate(cb_person_default_on_file=as.factor(cb_person_default_on_file))
+```
+
+
+Modificamos el nombre de la variable dependiente por target
+
+```{r}
+df=df %>% rename(target=loan_amnt)
+```
+
+
+Generamos dos dataframe, uno para entrenamiento (train) y otro para validación:
+
+```{r}
+#kk
+set.seed(1)
+
+#create ID variable
+df$id <- 1:nrow(df)
+
+#Use 70% of dataset as training set and remaining 30% as testing set 
+train <- df %>% dplyr::sample_frac(0.7)
+validacion  <- dplyr::anti_join(df, train, by = 'id')
+
+#Borrar la variable id
+train <-subset(train, select= -c(id))
+validacion <-subset(validacion, select= -c(id))
+
+```
+
+Tamaño de los dataframe
+
+```{r}
+dim(train)
+dim(validacion)
+
+```
+
+
+Antes de comenzar a analizar las variables definimos unas funciones en R para facilitar el código del análisis.
+
+Aunque hay multiples paquetes con resumenes estadísticos, generamos uno adaptado y así "jugamos" un poco con R.
+El matiz es que no encontrabamos ninguno que tenga el porcentaje de ceros por variable.
+
+```{r}
+
+describe_v1 <-function(dataframe,variable) {
+
+  tabla1 <- dataframe %>%  
+                                
+  summarise(
+    cases       = format(n(),big.mark = ","),                                               
+    min   = format(min({{variable}}, na.rm = T),big.mark = ","),                    
+    p01   = format(quantile({{variable}},c(0.01), na.rm = T ),big.mark = ","),
+    p03   = format(quantile({{variable}},c(0.03), na.rm = T ),big.mark = ","),  
+    p05   = format(quantile({{variable}},c(0.05), na.rm = T ),big.mark = ","),
+    p10   = format(quantile({{variable}},c(0.10), na.rm = T ),big.mark = ","),
+    
+    mean  = format(round(mean({{variable}}, na.rm=T), digits = 1),big.mark = ","),  
+    median  = format(round(median({{variable}}, na.rm=T), digits = 1),big.mark = ","),  
+    
+    p90   = format(quantile({{variable}},c(0.90), na.rm = T ),big.mark = ","), 
+    p95   = format(quantile({{variable}},c(0.95), na.rm = T ),big.mark = ","), 
+    p97   = format(quantile({{variable}},c(0.97), na.rm = T ),big.mark = ","),
+    p99   = format(quantile({{variable}},c(0.99), na.rm = T ),big.mark = ","),  
+    
+    max   = format(max({{variable}}, na.rm = T),big.mark = ","),                    
+ 
+    )
+ 
+
+  return(tabla1)
+}
+
+```
+
+
+```{r} 
+describe_v2 <-function(dataframe,variable) {
+  
+  tabla2 <- dataframe %>%                                        
+  summarise(
+    sesgo    = format(round(skewness({{variable}}, na.rm = T), digits = 1),big.mark = ","),
+    curtosis    = format(round(kurtosis({{variable}}, na.rm = T), digits = 1),big.mark = ","),
+    sd    = format(round(sd({{variable}}, na.rm = T), digits = 1),big.mark = ","),  
+    missing         = sum(is.na({{variable}}),digits = 1)-1,
+    pct_missing = scales::percent(missing / n()) ,
+    valor_0     = sum({{variable}} == 0, na.rm = T),               
+    pct_valor_0 = scales::percent(valor_0 / n())   
+    )  
+
+  return(tabla2)
+}
+
+```
+
+
+```{r}
+
+grafico_numerico2 <-function(dataframe,variable) {
+    mean_vble  = round(mean(dataframe$variable, na.rm=T), digits = 1)
+    return(mean_vble)
+}
+#v=grafico_numerico2(df,loan_amnt)
+```
+
+```{r}
+
+grafico_numerico <-function(dataframe,variable) {
+
+      #mean_vble  = round(mean(dataframe$variable, na.rm=T), digits = 1)
+      
+        fill <- "lightblue"
+        line <- "darkblue"
+      
+      b3 <- ggplot(dataframe, aes({{variable}})) +
+              geom_density(fill = fill, colour = line) +
+              #geom_vline(xintercept = mean_vble, size = 1, colour = "#FF3721",linetype = "dashed")+
+             theme(plot.title = element_text(hjust = 0.5))
+      
+      #return(b3)
+}
+```
+
+
+```{r}
+
+grafico_categoricas <-function(dataframe,variable,titulo,eje_y) {
+
+      #mean_vble  = round(mean(dataframe$variable, na.rm=T), digits = 1)
+      
+      fill <- "#4271AE"
+      line <- "#1F3552"
+      
+      b3 <- ggplot(data = dataframe, aes(x = {{variable}})) + 
+            geom_bar(color = 'darkslategray', fill = 'steelblue') + 
+            xlab(eje_y) + 
+            ylab("Cantidades") + 
+            ggtitle(titulo) +
+            coord_flip()+
+            geom_text(stat='count',aes(label=..count..), vjust=-0.5, size=3) 
+      
+      return(b3)
+}
+
+#grafico_categoricas(df,loan_grade,s,ss)
+```
+
+
+```{r}
+
+grafico_categoricas33 <-function(dataframe,variable) {
+
+      b3 <- (ggplot(dataframe, aes({{variable}}, fill={{variable}}))
+           + geom_bar()
+
+           + geom_text(
+               aes(label=after_stat(..count..)),
+               stat='count',
+              nudge_x=-0.14,
+               nudge_y=0.125,
+              vjust=-0.5
+           )
+          + geom_text(
+         aes(label=scales::percent(round((..prop..),2)), group=1),
+         stat='count',
+         nudge_x=0.14,
+         nudge_y=0.125,
+         va="middle",
+         vjust=0.5,
+         accuracy = 1L
+         
+         )+
+        theme(axis.text.x = element_text(angle = 60, vjust=0.5, size = 7), 
+        axis.text.y = element_text(angle = 0, vjust=0.5, size = 7),
+        panel.grid.minor = element_blank()
+    )
+      )
+      
+      #return(b3)
+}
+
+```
+
+```{r}
+
+grafico_categoricas_biv <-function(dataframe,variable) {
+
+
+b1=ggplot(dataframe) + 
+        geom_density(aes(x = loan_amnt, fill = {{variable}}), position = 'stack') + 
+        xlab("Importe") + 
+        ylab("Frecuencia") + 
+        ggtitle("Importe de préstamo") +
+        theme_minimal()
+
+      return(b1)
+}
+```
+
+
+```{r}
+grafico_categoricas_biv2 <-function(dataframe,variable) {
+  
+    p1 <- df %>% select(target, {{variable}}) %>%
+      na.omit() %>%
+      ggplot(aes(x={{variable}}, y=target, fill={{variable}})) +
+      geom_boxplot()+
+      theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+    
+    return(p1)
+}
+```
+
+
+```{r}
+grafico_categoricas_biv3 <-function(dataframe,variable) {
+  
+    b1= ggplot(data = dataframe, aes(x = target, y = {{variable}})) + 
+      geom_point(aes(color = {{variable}}), size = 1, alpha = 0.7) +
+      geom_smooth(aes(color = {{variable}})) +
+      facet_grid({{variable}} ~., scales = 'free') +
+      xlab('Puntuación') + 
+      ylab('Puntuación') +
+      ggtitle('gggggggggg') + 
+      theme_minimal()
+    
+      return(b1)
+}
+```
+
+
+```{r}
+
+test_normalidad <-function(df_var){
+  
+  anderson<-ad.test(df_var)
+  cramer<-cvm.test(df_var)
+  lillies<-lillie.test(df_var)
+
+  ## Salida a pantalla 
+ print(anderson)
+ print(cramer)
+ print(lillies)
+ qqnorm(df_var)
+
+}
+
+```
+
+
+
+```{r}
+grafico_train_val_num <-function(df1,df2,variable) {
+  
+  fill <- "lightblue"
+  line <- "darkblue"
+  
+  fill2 <- "lavenderblush2"
+  line2 <- "darkred"        
+        
+  ggplot() +
+          geom_density(data=df1,aes({{variable}}), fill = fill, colour = line,alpha=0.5) +
+          geom_vline( size = 1, colour = "#FF3721",linetype = "dashed")+
+         theme(plot.title = element_text(hjust = 0.2))+
+    
+          geom_density(data=df2,aes({{variable}}), fill = fill2, colour = line2,alpha=0.5) +
+          geom_vline( size = 1, colour = "#FF3721",linetype = "dashed")+
+         theme(plot.title = element_text(hjust = 0.2)) 
+}
+
+
+```
+
+
+## Análisis univariante
+
+
+### Variable dependiente (target)
+
+En primer lugar, se realiza un análisis de la variable dependiente (target).
+
+
+
+
+```{r}
+G1=grafico_numerico(train,target)
+G1
+```
+
+```{r, warning=FALSE}
+test_normalidad(train$target)
+```
+
+
+```{r }
+des1=describe_v1(train,target)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+```{r }
+des2=describe_v2(train,target)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+Se aprecia que no es una variable normal y tendremos que hacer una transformación. Se aprecian picos en las cifras de múltiplos de 5.000
+
+
+### Variables independientes numéricas 
+
+
+**Edad (años) (person_age)**	
+
+
+```{r}
+G2=grafico_numerico(train,person_age)
+G2
+
+```
+
+```{r, warning=FALSE}
+test_normalidad(train$person_age)
+```
+
+```{r }
+des1=describe_v1(train,person_age)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(train,person_age)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+Normalmente las políticas de las entidades bancarias restringen los préstamos personales a paritr de una edad, algo lógico para garantizarse que se lo van a pagar. Normalmente esa edad ronda entre los 70 y 75 años, siempre puede haber excepciones. Para nuestro caso consideramos que son datos erróneos y vamos a eliminarlos; también se podría barajar la opción de declararlos como valores missing y luego hacer una imputación de la media, pero dado que tenemos una muestra de información suficiente, se toma la decisión de eliminarlos.
+
+```{r}
+train %>% filter( person_age>75) %>%
+        kbl() %>%
+        kable_styling()
+```
+
+
+Se aprecia que no es una variable normal y tendremos que hacer una transformación.
+
+
+**Ingresos personales (person_income)**
+
+
+```{r}
+G3=grafico_numerico(train,person_income)
+G3
+
+```
+
+```{r }
+des1=describe_v1(train,person_income)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(train,person_income)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+```{r, warning=FALSE}
+test_normalidad(train$person_income)
+```
+
+
+Vemos que hay muchos casos con ingresos altos en la cola derecha, lo que hará que si no los corregimos y entra esta variable en el modelo son candidatos a ser puntos influyentes.
+
+```{r}
+train %>% filter( person_income>600000) %>%
+        kbl() %>%
+        kable_styling()
+
+```
+
+
+Se aprecia que no es una variable normal y tendremos que hacer una transformación. También que hay un registro con una ingreso descomunal y que tiene una edad errónea, se eliminará el registro.
+
+**Tiempo trabajado (person_emp_length)**
+
+
+```{r, warning=FALSE}
+G4=grafico_numerico(train,person_emp_length)
+G4
+
+```
+
+```{r, warning=FALSE}
+# Test de normalidad
+test_normalidad(train$person_emp_length)
+```
+
+
+```{r }
+
+des1=describe_v1(train,person_emp_length)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(train,person_emp_length)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+Se aprecia que no es una variable normal y tendremos que hacer una transformación.
+
+**Tasa de interés (loan_int_rate)**
+
+```{r, warning=FALSE}
+G5=grafico_numerico(train,loan_int_rate)
+G5
+
+```
+
+```{r, warning=FALSE}
+# Test de normalidad
+test_normalidad(train$person_emp_length)
+```
+
+```{r }
+des1=describe_v1(train, loan_int_rate)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(train,loan_int_rate)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+**Lapso de tiempo desde el anterior préstamo (cb_person_cred_hist_length)**
+
+
+```{r}
+G6=grafico_numerico(train,cb_person_cred_hist_length)
+G6
+
+```
+
+
+```{r, warning=FALSE}
+# Test de normalidad
+test_normalidad(train$person_emp_length)
+```
+
+
+```{r }
+des1=describe_v1(train,cb_person_cred_hist_length)
+    
+  des1 %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+
+```{r }
+des2=describe_v2(train,cb_person_cred_hist_length)
+    
+  des2 %>%
+  kbl() %>%
+  kable_styling()
+```
+
+
+Esta variable está escalonada, por lo que se discretiza.
+
+### Variables categóricas
+
+**Relación con la propiedad de la vivienda (person_home_ownership)**
+
+
+```{r, warning=FALSE}
+a2=grafico_categoricas33(train,person_home_ownership)
+a2
+```
+
+
+El valor de la categoría OTHER tiene muy pocos caso por lo que se le asignará el valor más frecuente RENT.
+
+**Motivo del préstamo (loan_intent)**
+
+
+```{r, warning=FALSE}
+a3=grafico_categoricas33(train,loan_intent)
+a3
+```
+
+
+**Falta de pago de un préstamo antiguo (cb_person_default_on_file)**
+
+
+
+```{r, warning=FALSE}
+a4=grafico_categoricas33(train,cb_person_default_on_file)
+a4
+```
+
+
+
+## Análisis bivariable
+
+
+```{r}
+grafico_categoricas_biv2(train, loan_intent)
+```
+
+```{r}
+grafico_categoricas_biv2(train, person_home_ownership)
+```
+
+
+```{r}
+grafico_categoricas_biv2(train,cb_person_default_on_file)
+```
+
+
+
+
+Scatter plot entre la variable dependiente, target y las independientes numéricas para ver relaciones entre ellas:
+
+
+```{r, warning=FALSE}
+bi1=ggplot(train, aes(x=person_age, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi2=ggplot(train, aes(x=person_income, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi3=ggplot(train, aes(x=person_emp_length, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi4=ggplot(train, aes(x=loan_int_rate, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+plot_grid(bi1, bi2,bi3,bi4)
+```
+
+
+
+## Depuración de EDA  
+
+
+A coninutación, se procede a realizar la depuración que hemos visto en el EDA:
+
+
+Comentamos de eliminar el registro erróneo, que tiene unos ingresos por persona de 6.000.000 y 144 años y este registro está incluido en el filtro de de eliminar registros mayores de 75 años:
+
+```{r}
+dim(train)
+train <- train %>% filter(person_age<=75)
+dim(train)
+```
+
+
+Para las variables numéricas imputaremos los valores superiores al percentil 99 con dicho percentil:
+
+
+```{r}
+#Mejora....con una función si da tiempo o incluso dentro de un mismo train <- train %>%
+train <- train %>%
+  mutate(target= ifelse(target>=quantile(train$target,0.99),quantile(train$target,0.99), target))
+
+train <- train %>%
+  mutate(person_income= ifelse(person_income>=quantile(train$person_income,0.99, na.rm = T), quantile(train$person_income,0.99, na.rm = T), person_income))
+
+train <- train %>%
+  mutate(person_emp_length= ifelse(person_emp_length>=quantile(train$person_emp_length,0.99, na.rm = T) ,quantile(train$person_emp_length,0.99, na.rm = T), person_emp_length))
+
+train <- train %>%
+  mutate(loan_int_rate= ifelse(loan_int_rate>quantile(train$loan_int_rate,0.99, na.rm = T), quantile(train$loan_int_rate,0.99, na.rm = T), loan_int_rate))
+
+train <- train %>%
+  mutate(loan_int_rate= ifelse(loan_int_rate>quantile(train$loan_int_rate,0.99, na.rm = T), quantile(train$loan_int_rate,0.99, na.rm = T), loan_int_rate))
+
+train <- train %>%
+  mutate(person_age= ifelse(person_age>quantile(train$person_age,0.99, na.rm = T), quantile(train$person_age,0.99, na.rm = T), person_age))
+
+```
+
+
+
+Para la variable categórica relación con la casa (person_home_ownership) la categoría OTHER tiene muy pocos casos y le asignamos el valor más frecuente, en este caso RENT.
+
+
+```{r}
+table(train$person_home_ownership)
+train$person_home_ownership[train$person_home_ownership=="OTHER"] <-"RENT"
+table(train$person_home_ownership)
+
+```
+
+
+
+Para la variable lapso de tiempo desde el anterior préstamo parece qe tiene escalones por lo que decidimos discretizar variable.
+ 
+
+```{r}
+train$cb_person_cred_hist_length_cat <- cut(train$cb_person_cred_hist_length,c(0,4,10,Inf),
+                                            labels = c("0-4", "5-10", "Más de 10") )
+train %>% 
+      group_by(cb_person_cred_hist_length_cat) %>%
+        summarise (n=n(),"%"=n/nrow(train)*100) 
+```
+
+
+
+
+
+## Detección e imputación de datos faltantes
+
+
+En el EDA ya hemos visto los missing que tenemos para cada una de nuestras variables, ahora haremos un gráfico para recopilar que variables tienen missing y si hay alguna relación entre los registroS que tienen missing, por si se concentran en casos concretos.
+
+
+En clase se nos planteo hacer este paso antes, pero no sé hizo de esa forma porque queríamos hacer las imputaciones de las variables con los percentiles 99 sin tener en cuenta los valores imputados de los missing
+
+
+```{r}
+
+aggr_plot <- aggr(train, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE,
+                  labels=names(train), cex.axis=.4, gap=3, 
+                  ylab=c("Histogram of missing data","Pattern"))
+
+
+```
+
+Observamos que no están concentrados en casos concretos, que no hay ningún patrón y sólo tenemos missing en dos variables. Para ver el potencial de esta visión de estudio, hacemos gráfico de las dos variables que tienen missing para ver si encontramos algún patrón y éstas con el target, pero no es el caso, no hay patrón:
+
+
+```{r}
+train %>% select(loan_int_rate, person_emp_length) %>% marginplot()
+```
+
+```{r}
+
+train %>% select(person_emp_length, target) %>% marginplot()
+
+```
+
+```{r}
+
+train %>% select(loan_int_rate, target) %>% marginplot()
+
+```
+
+Generamos un dataframe con aquellos casos que tienen valores missing en cualquiera de los dos campos por si se quisiera ver en su conjunto la tabla, pero donde se ven las relaciones es en los gráficos anteriores.
+
+```{r}
+df_train_missing <-train %>% 
+        filter(is.na(person_emp_length) | is.na(loan_int_rate))
+```
+
+
+
+Como solución imputaremos el valor de la mediana a los missig siendo conscientes que no es la mejor solución. En aquellas variables que haya muchos missing puede modificar la distribución. En nuestro caso sí que podría afectar a la variable loan_int_rate que tiene un 9,8% de missing pero no en loan_int_rate, 2,9%.
+
+Una opción de mejora en este caso es utilizar el paquete MICE de R, que dispone de las imputaciones clásicas de media y mediana y la posibilidad de imputar con métodos de regresión estocástica y multiple. 
+
+```{r}
+
+train$person_emp_length[is.na(train$person_emp_length)] <-median(train$person_emp_length, na.rm=T)
+train$loan_int_rate[is.na(train$loan_int_rate)] <-median(train$loan_int_rate, na.rm=T)
+
+#train %>%   filter(loan_int_rate == NA & person_emp_length == NA)
+
+#train %>%   filter(loan_int_rate == NA & person_emp_length == NA)
+```
+
+Comprobación rápida que ya no tenemos missing:
+
+```{r}
+
+apply(is.na(train),2,FUN="mean")*100 
+
+```
+
+
+## Transformaciones de variables cuantitativas
+
+
+**Importe del préstamo (loan_amnt/Target)**
+
+Utilizamos la librería bestNormalize que nos da la opción de sacar multiples transformaciones y te indica cuál es la mejor.
+
+```{r}
+
+
+    (arcsinh_obj_tar <- arcsinh_x(train$target))
+    (boxcox_obj_tar <- boxcox(train$target))
+    (yeojohnson_obj_tar <- yeojohnson(train$target))
+    (orderNorm_obj_tar <- orderNorm(train$target))
+     (BNobject_tar <- bestNormalize(train$target)) 
+  
+
+    par(mfrow = c(2,2))
+    MASS::truehist(arcsinh_obj_tar$x.t, main = "Arcsinh transformation", nbins = 12)
+    MASS::truehist(boxcox_obj_tar$x, main = "Box Cox transformation", nbins = 12)
+    MASS::truehist(yeojohnson_obj_tar$x, main = "Yeo-Johnson transformation", nbins = 12)
+    MASS::truehist(orderNorm_obj_tar$x, main = "orderNorm transformation", nbins = 12)
+
+
+```
+
+
+En este caso la mejor es orderNorm (The Ordered Quantile technique), aunque la de Box Cox que era la que se barajaba en un principio es muy similar. 
+
+La función orderNorm hace una normalización de cuantil ordenado (ORQ) que utiliza un mapeo de rango de los datos observados a la distribución normal para garantizar una distribución transformada normal (si los lazos no están presentes). La normalización ORQ funciona de manera muy consistente
+a través de diferentes distribuciones, normalizando con éxito datos sesgados a la izquierda o a la derecha, datos multimodales.
+
+
+Generamos una variable nueva con la transformación:
+
+```{r}
+train$target_tr <- orderNorm_obj_tar$x
+```
+
+
+**Edad (person_age)**
+
+
+```{r}
+
+    (arcsinh_obj_age <- arcsinh_x(train$person_age))
+    (boxcox_obj_age <- boxcox(train$person_age))
+    (yeojohnson_obj_age <- yeojohnson(train$person_age))
+    (orderNorm_obj_age <- orderNorm(train$person_age))
+     (BNobject_age <- bestNormalize(train$person_age)) 
+  
+
+    
+    par(mfrow = c(2,2))
+    MASS::truehist(arcsinh_obj_age$x.t, main = "Arcsinh transformation", nbins = 12)
+    MASS::truehist(boxcox_obj_age$x, main = "Box Cox transformation", nbins = 12)
+    MASS::truehist(yeojohnson_obj_age$x, main = "Yeo-Johnson transformation", nbins = 12)
+    MASS::truehist(orderNorm_obj_age$x, main = "orderNorm transformation", nbins = 12)
+```
+
+En este caso la mejor es orderNorm (The Ordered Quantile technique).
+
+Generamos una variable nueva con la transformación:
+```{r}
+train$person_age_tr <- orderNorm_obj_age$x
+```
+
+
+**Ingresos (person_income)**
+
+
+```{r}
+
+
+    (arcsinh_obj_in <- arcsinh_x(train$person_income))
+    (boxcox_obj_in <- boxcox(train$person_income))
+    (yeojohnson_obj_in <- yeojohnson(train$person_income))
+    (orderNorm_obj_in <- orderNorm(train$person_income))
+
+     (BNobject_in <- bestNormalize(train$person_income)) 
+  
+
+    par(mfrow = c(2,2))
+    MASS::truehist(arcsinh_obj_in$x.t, main = "Arcsinh transformation", nbins = 12)
+    MASS::truehist(boxcox_obj_in$x, main = "Box Cox transformation", nbins = 12)
+    MASS::truehist(yeojohnson_obj_in$x, main = "Yeo-Johnson transformation", nbins = 12)
+    MASS::truehist(orderNorm_obj_in$x, main = "orderNorm transformation", nbins = 12)
+
+```
+
+En este caso la mejor es orderNorm (The Ordered Quantile technique).
+Generamos una variable nueva con la transformación:
+```{r}
+train$person_income_tr <- orderNorm_obj_in$x
+```
+
+
+**Tiempo trabajado (person_emp_length)**
+
+
+
+```{r}
+
+
+
+    (arcsinh_obj_len <- arcsinh_x(train$person_emp_length))
+
+    (yeojohnson_obj_len <- yeojohnson(train$person_emp_length))
+    (orderNorm_obj_len <- orderNorm(train$person_emp_length))
+    #(boxcox_obj <- boxcox(train$person_emp_length))
+    (BNobject_len <- bestNormalize(train$person_emp_length)) 
+    (sqrt_x_object_len <- sqrt_x(train$person_emp_length))
+
+    
+    par(mfrow = c(2,2))
+    MASS::truehist(arcsinh_obj_len$x.t, main = "Arcsinh transformation", nbins = 12)
+    #MASS::truehist(boxcox_obj$x, main = "Box Cox transformation", nbins = 12)
+    MASS::truehist(yeojohnson_obj_len$x, main = "Yeo-Johnson transformation", nbins = 12)
+    MASS::truehist(orderNorm_obj_len$x, main = "orderNorm transformation", nbins = 12)
+    MASS::truehist(sqrt_x_object_len$x, main = "SQRT transformation", nbins = 12)
+
+
+
+    #str(train$person_emp_length)
+```
+
+
+En este caso la mejor es la raiz cuadrada.
+Generamos una variable nueva con la transformación:
+```{r}
+train$person_emp_length_tr <- sqrt_x_object_len$x
+
+```
+
+
+
+
+Vemos de nuevo graficamente las relaciones entre el target y as variables numéricas una vez transformadas:
+
+
+```{r, warning=FALSE}
+bi1=ggplot(train, aes(x=person_age, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi2=ggplot(train, aes(x=person_income, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi3=ggplot(train, aes(x=person_emp_length, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+bi4=ggplot(train, aes(x=loan_int_rate, y=target)) +
+  geom_point() +
+  stat_smooth(method=lm)
+
+plot_grid(bi1, bi2,bi3,bi4)
+
+```
+
+
+
+## Correlaciones
+
+Calculamos las correlaciones para las variables numéricas. Este paso se podría haber hecho también en la fase previa a hacer los cambios en las variables, es decir antes de las imputaciones de percentiles, de transfomraciones, de hecho es recomendable, pero cuando hay datos de missing se recomienda también después dada la sensibilidad de estos cálculos cuando existen missing.
+
+Las correlaciones más habituales son las de Pearson, Kendall y Sperman.
+
+```{r}
+corr_matrix <- train %>% select_if(is.numeric) %>% 
+  select(-c(loan_status,loan_percent_income)) %>%
+  cor(method="pearson", use="pairwise.complete.obs")
+
+library('corrplot')
+```
+
+```{r}
+ 
+# Gráfico de correlación con color y correlación MIC
+corrplot(corr_matrix, 
+         method="color",
+         type="lower", 
+         number.cex=0.7,
+         # Agregar coeficiente de correlación
+         addCoef.col = "black", 
+         tl.col="red", 
+         tl.srt=90, 
+         tl.cex = 0.9,
+         diag=FALSE, 
+         is.corr = F 
+)
+```
+
+
+Se obserava las correlaciones de valor 1 de las variables transformadas con las de su origen, también destaca la edad y el lapso de tiempo desde que pediste el último crédito, lógica y además esta última variable la hemos discretizado por lo que no se usará la numérica y por otro lado la más interesante nuestra variable target, importe de préstamo, con los ingresos de la persona que le dán el crédito.
+
+
+# Regresión
+
+## Regresión simple
+
+Primero haremos una regresión simple con la variable de mayor correlación con la variable dependiente (target_tr ~  ingresos_tr):
+
+```{r}
+lm_fit <- lm(target_tr~person_income_tr, data=train)
+summary(lm_fit)
+
+```
+
+
+El p-valor del modelo es significativamente bajo, 2.2e-16, por lo que se puede aceptar que el modelo no es por azar. Para los parámetros de la regresión lineal, tanto el de la constante como el de ingresos tienen p-valores muy bajos también por lo que podemos rechazar la hipótesis nula. En cuanto al R cuadrado explica el 17,51% de la variabilidad del importe del prestamo, cifra muy muy baja.
+
+Y el el error estándar residual (Residual standard error) es de 5.685 este valor cuanto más pequeño mejor, el coeficiente constante es 5.102e+03 y el de person_income_tr, 6.951e-02
+
+La interpretación de los coeficientes al ser muy bajos es difícil de interpretar, por lo que pondré otro modelo fitctio para explicar:
+
+importe_prestamo= 47,60 + 3,01 × ingresos
+
+En este ejemplo los coeficientes de regresión son 47,60 para la constante y 3,01 para ingresos y la interpretación es cuando aumentamos en una unidad en los ingresos, el importe de préstamo aumenta en 3,01 unidades.
+
+
+Es decir, los coeficientes de una regresión simple se interpretan como el cambio en la variable dependiente (Y) por unidad de cambio en la variable independiente (X) mientras se mantiene constante el resto de las variables independientes. El coeficiente de la variable independiente se llama el "pendiente" y el coeficiente constante se llama el "intercepto".
+
+## Regresión multiple
+
+
+### Métodos de selección de variables
+
+
+Para este apartado nos basaremos fielmente en el trabajo elaborado por Victor Aceña en noviembre de 2021.
+
+Usaremos el método Subset que consiste en generar todas las combinaciones de variables posibles y quedarse con el “mejor” subconjunto de ellas. Considerando mejor, el que obtenga una puntuación superior para alguna métrica de evaluación definida previamente.
+
+Como se observa a continuación, para implementar este método se utiliza la función regsubsets de la librería leaps.
+
+```{r, warning=FALSE}
+regfit_full <- leaps::regsubsets(target_tr~ person_age_tr+ person_income_tr+
+                                   person_emp_length_tr+loan_int_rate+loan_intent
+                                 +cb_person_cred_hist_length_cat+ person_home_ownership, 
+                                 data=train,nvmax=5)
+```
+
+
+Mediante la función summary, podemos ver qué variables están presentes en cada uno de los subconjuntos. Además, se observa que por el número de subconjuntos evaluados está limitado a cinco, por defecto son ocho. Através de los asteriscos vemos que una variable está incluida en el correspondiente modelo.
+
+
+```{r}
+reg_sum <- summary(regfit_full)
+reg_sum
+```
+
+
+Para poder evaluar los modelos, podemos consultar los vectores de métricas almacenados mediante summary, por ejemplo el R cuadrado ajustado, el criterio de información de Akaike,Cp (AIC) y criterio de información bayesiano, BIC. Estos dos últimos al ser medidas relacionadas con los errores, cuanto más baja comparado con otro modelo, mejor será el modelo.
+
+
+
+```{r}
+reg_sum$adjr2
+reg_sum$bic
+```
+
+
+Para evaluarlo de una manera visual, el paquete tiene una función plot incorporada que nos indica la mejor combinación probada en función de las distintas métricas disponibles.
+
+```{r}
+for (metric in c("r2", "adjr2", "Cp", "bic")){plot(regfit_full, scale=metric)}
+
+```
+
+Una vez se haya seleccionado uno de los modelos, se pueden obtener los coeficientes para cada una de las variables con la instrucción coef.
+
+En este caso se seleccionaría el modelo primero, es el que tiene el BIC más pequeño, aunque el R cuadrado ajustado no sea el mas alto, pero no por tanto, pero siempre tiene que primar que el modelo cuanto más simple mejor, principio de parsimonia. Recordamos que el R cuadrado (sin ajustar) no se tiene que ver para la regresión multiple, recordemos que este R, aumentará siempre y cuando metas más variables, por eso se usa el ajustado que penaliza el incluir variables. 
+
+```{r}
+coef(regfit_full, 1)
+```
+
+Existen otros métodos como:
+
+Forward Stepwise: este método parte de un conjunto de variables vacío, de manera que este se incrementa con la variable que más mejora el modelo para la métrica seleccionada. Se incluye una variable a cada paso, hasta que se llega al número seleccionado o el modelo no mejora más.
+
+Backward Stepwise: al contaratio que el forward se parte del conjunto de todas las variables, de manera que este se disminuye con la variable que más mejora el modelo para la métrica seleccionada. Se elimina una variable a cada paso, hasta que se llega al número seleccionado o el modelo no mejora más
+
+Y luego existe el método clasico de ir partiendo de todas las variables e ir sacando y metiendo en función de los contrastes de hipótesis de los parámetros y del conocimiento de la materia a estuadiar.
+
+
+Siempre es aconsejable barajar varios metodos y contrastarlos y hacer muchas pruebas, hoy en día es más sencillo dado que las máquinas pueden soportarlo.
+
+
+Gráficos por número de variables, R ajustado y BIC:
+
+```{r}
+par ( mfrow =c(2 ,3) )
+plot(reg_sum$rss , xlab ="Number of Variables", ylab ="RSS ",type ="l")
+plot(reg_sum$adjr2 ,xlab ="Number of Variables",ylab ="Adjusted RSq", type ="l")
+plot(reg_sum$bic ,xlab ="Number of Variables",ylab ="BIC", type ="l")
+
+```
+
+
+Regresión con las variables seleccionadas:
+
+```{r}
+summary(modelo_final<-lm(target_tr~person_income_tr, train))
+```
+
+Lo visto en la regresión simple, se vé que los contrastes de los parámetros de la constante y de los ingresos transformados se rechaza la hipótesis nula de que son nulos y tiene un R cuadradro ajustado de 0.1751, es decir explica un 17,51% de la variación de la variable dependiente.
+
+#### Diagnóstico del modelo
+
+
+Realizamos el análisis de residuos del modelo final:
+
+
+
+Por test de normalidad y por gráfico vemos que los residuos son normales
+
+```{r}
+# Test de hipótesis para el análisis de normalidad de los residuos
+test_normalidad(modelo_final$residuals)
+```
+
+Una visión más amplia de los residuos:
+
+```{r}
+par(mfrow=c(2,2))
+plot(modelo_final)
+```
+
+En el gráfico de residuos y ajustes observamos que no tienen forma de embudo,lo que evidenciaría la homocedasticidad, pero no se ve en este caso.
+
+Sobre los puntos influyentes se puede ver el grafíco de abajo a la derecha, aquellos a en los extremos serán los que pueden influir, en este caso no se ve algún caso, por ejemplo los casos que eliminamos al principio, si no los hubieramos elimnado saldrían destacados en este gráfico.
+
+
+Test de contraste de homocedasticidad Breusch-Pagan
+
+Hipótesis nula: los errores tienen varianza constante (homocedasticidad)
+H1:los errores no tienen varianza constante (heterocedasticidad)
+
+```{r}
+bptest(modelo_final)
+```
+
+Como el p-valor es pequeño entonces hay evidencias para rechazar la hipótesis nula de homocedasticida, corroborando lo visto graficamente
+
+En el caso de que hubiera homocedasticidad una solución sería transformas la variable Y con una función concava como por ejemplo el logarito o raiz cuadrada, cste tipo de transformaciones ayudan a encoger en mayor medida los valores mayores en la respuesta Y, reduciendo la heterocedasticidad.
+
+
+¿Hay colinealidad?
+
+Al ser un modelo tan simple, no puede, pero para evaluarlo se calculan los factores de inlación de la varianza (VIF)
+
+Cómo interpretar los valores de VIF:
+*El valor de VIF comienza en 1 y no tiene límite superior. Una regla general para interpretar los VIF es la siguiente:
+
+*Un valor de 1 indica que no hay correlación entre una variable explicativa dada y cualquier otra variable explicativa en el modelo.
+*Un valor entre 1 y 5 indica una correlación moderada entre una variable explicativa dada y otras variables explicativas en el modelo, pero esto a menudo no es lo suficientemente grave como para requerir atención.
+*Un valor mayor que 5 indica una correlación potencialmente severa entre una variable explicativa dada y otras variables explicativas en el modelo. En este caso, las estimaciones de los coeficientes y los valores p en el resultado de la regresión probablemente no sean confiables.
+
+Una vez obtenido el valor de VIF para cada una de las variables independientes de un conjunto de datos es posible identificar las variables más dependientes y eliminarlas. El proceso que se debería seguir para solucionar la multicolinealidad con VIF es:
+
+1.Obtener el VIF para todas las variables independientes
+2.Identificar la que tiene el valor máximo de VIF, solamente una, aunque existan dos o más con el mismo valor
+3.Si esta variable supera un valor umbral, por ejemplo 5, eliminarla y volver al punto 1. En caso contrario se termina el proceso.
+
+Es importante eliminar únicamente una variable en cada paso, ya que en caso contrario se podría eliminar todas las variables relacionadas. Por ejemplo, si tenemos una variable que es dos veces otra, en tal caso ambas tendrán un valor de VIF que tiende a infinito, ya que el R^2 es igual a uno. Si eliminamos ambas se eliminan todas las ocurrencias de esa variable, que no es lo que se desea.
+
+
+```{r}
+# Factores de inflación de la varianza......DARIA ERROR AL SOLO TENER UN TERMINO, UNA VARIALE INDEPENDIENTE
+#car::vif(modelo_final)
+```
+
+
+
+Incorrelación de los residuos: Comprobar la incorrelación para los residuos estudentizados del modelo ajustado. Se realiza a través del Test de Durbin-Watson (asume bajo la hipótesis nula que no existe correlación). La función dwtest( ) realiza este contraste directamente sobre los residuos estudentizados.
+
+```{r}
+dwtest( modelo_final,
+        alternative = "two.sided", 
+        data = train)
+```
+
+
+Con un p-valor de  = 0.3763, mayor de 0,05, no podemos rechazar la hipótesis nula, por lo tanto suponemos incorrelación para los residuos estudentizados del modelo ajustado.
+
+### EStimación de predicciones 
+
+Previamente tratamos el fichero de validación, realizaremos las mismas modificacines al fichero de test que hicimos al de train para poder ejecutar el modelo en las mismas condiciones.
+
+```{r}
+
+validacion$person_home_ownership[validacion$person_home_ownership=="OTHER"] <-"RENT"
+
+
+validacion$cb_person_cred_hist_length_cat <- cut(validacion$cb_person_cred_hist_length,c(0,4,10,Inf),
+                                            labels = c("0-4", "5-10", "Más de 10") )
+
+validacion$person_emp_length[is.na(validacion$person_emp_length)] <-median(train$person_emp_length, na.rm=T)
+validacion$loan_int_rate[is.na(validacion$loan_int_rate)] <-median(train$loan_int_rate, na.rm=T)
+
+
+
+```
+
+
+
+Comprobación rápida que ya no tenemos missing
+
+```{r}
+apply(is.na(validacion),2,FUN="mean")*100
+
+```
+
+
+Transformaciones de variables para que sigan la hipótesis de normalidad de los datos.
+
+
+```{r}
+
+(orderNorm_obj_age_val <- orderNorm(validacion$person_age))
+validacion$person_age_tr <- orderNorm_obj_age_val$x
+
+(orderNorm_obj_in_val <- orderNorm(validacion$person_income))
+validacion$person_income_tr <- orderNorm_obj_in_val$x
+
+(sqrt_x_object_len_val <- sqrt_x(validacion$person_emp_length))
+validacion$person_emp_length_tr <- sqrt_x_object_len_val$x
+```
+
+
+
+
+Comparamos que los datos de train y de validacion siguen las misma distribución por variable, esta fase es muy importante porque cualquier cambio de distribución en alguna variable que luego entra en el modelo puede provocar que no ajuste bien el modelo, en este caso al ser una muestra aleatoria del mismo dataframe es muy complicado que pase, pero si el fichero de validación es de otro periodo estacional, podría, por lo que esta fase es siempre esencial.
+
+Aunque a priori sólo se podría ver en aquellas variables que entran en el modelo, es recomendable ver también las más relvantes de tus datos por conocimientos de la materia por si ya se aprecian otros cambios y se pueden encontrar explicaciones de los mismos.
+
+
+Lo ideal es poner gráficos superpuestos....para ver mejor los cambios e incluir información de valores, missing, media, mediana, percentiles, porcentajes de 0....te puede pasar que en los nuevos datos, validación, tengas un missing y en los de entrenamiento, no,... (lo normal es que te dé error al ejecutar el modelo, pero si en la variable de entrenamiento no tiene ceros y luego en el de validación sí, que están enmascarados los valores missing, el modelo no te daría error, pero los resultados serán una sorpresa)
+
+
+**Edad (años) (person_age)**	
+
+
+```{r}
+grafico_train_val_num(train,validacion,cb_person_cred_hist_length)
+```
+
+
+
+**Ingresos personales (person_income)**
+
+
+```{r}
+
+grafico_train_val_num(train,validacion,person_income)
+```
+
+
+
+**Tiempo trabajado (person_emp_length)**
+
+
+```{r, warning=FALSE}
+grafico_train_val_num(train,validacion,person_emp_length)
+```
+
+
+
+**Tasa de interés (loan_int_rate)**
+
+```{r, warning=FALSE}
+
+grafico_train_val_num(train,validacion,loan_int_rate)
+```
+
+
+**Lapso de tiempo desde el anterior préstamo (cb_person_cred_hist_length)**
+
+
+```{r}
+
+grafico_train_val_num(train,validacion,cb_person_cred_hist_length)
+```
+
+**Relación con la propiedad de la vivienda (person_home_ownership)**
+
+
+```{r, warning=FALSE}
+a2_val=grafico_categoricas33(validacion,person_home_ownership)
+a2
+a2_val
+```
+
+
+El valor infrecuente de OTHER se le asignará el valor más frecuente RENT.
+
+**Motivo del préstamo (loan_intent)**
+
+
+```{r, warning=FALSE}
+a3_val=grafico_categoricas33(validacion,loan_intent)
+a3
+a3_val
+```
+
+
+**Falta de pago de un préstamo antiguo (cb_person_default_on_file)**
+
+
+
+```{r, warning=FALSE}
+a4_val=grafico_categoricas33(validacion,cb_person_default_on_file)
+a4
+a4_val
+```
+
+
+
+Y ahora generamos un fichero con las predicciones con el modelo fijado:
+
+
+```{r}
+predicciones <- predict(object=modelo_final, newdata=validacion)
+
+```
+
+
+
+Sobre estas prediciones también habría que evaluar las diferencias entre valor real y estimado similar al train y en el caso de que se tengan varios candidatos se podrían comparar los resultados sobre este fichero de validación.
+
+Y con esto finalizaríamos el trabajo, hemos ido un poco justos de tiempo por lo que se verá que el detalle y el mimo de los gráficos, las salidas y comentarios no es el desado.
+
+
+# Versiones y paquetes instalados de R
+
+```{r}
+ sesion_info <- devtools::session_info()
+dplyr::select(
+  tibble::as_tibble(sesion_info$packages),
+  c(package, loadedversion, source)
+)
+
+```
+
+
+
+Versión de R:
+```{r include=TRUE}
+version
+```
+
+
