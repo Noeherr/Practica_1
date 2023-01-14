@@ -13,16 +13,13 @@ output:
     self_contained: yes   
 ---
  
-Versión:
-```{r include=TRUE}
-version
-```
+
 
 ```{r  include=FALSE, fig.align='center'}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Rúbrica de la asignatura:
+# Rúbrica de la asignatura
 
 *	Uso de herramienta/s de control de versiones (1 punto)
 *	Definición de objetivos (1 punto)
@@ -57,10 +54,9 @@ Como decíamos queremos realizar un modelo multivariante para poder estimar el i
 #if (!require(corrplot)) {install.packages("corrplot")}
 #if (!require(VIM)) {install.packages("VIM")}
 #if (!require(bestNormalize)) {install.packages("bestNormalize")}
-# install.packages(MASS)
 #if (!require(leaps)) {install.packages("leaps")}
 #if (!require(lmtest)) {install.packages("lmtest")}
-
+#if (!require(mice)) {install.packages("mice")}
 
 
 library(dplyr)
@@ -72,11 +68,10 @@ library(corrplot)
 library(moments)
 library(VIM)
 library(nortest)
-#library(MASS)
 library(bestNormalize)
 library(leaps)
-#library(GGally)
 library(lmtest) 
+library(mice)
 
 
 ```
@@ -86,9 +81,11 @@ library(lmtest)
 Lectura del fichero de datos y de la descripción de las variables:
 
 ```{r}
+
+#Fijamos una semilla para ser el análisis reproducible
 set.seed(1)
 
-setwd("C:/David/Estadística/Master/Analisis de Fundamentos/R/Practica/")
+setwd("C:/David/Estadística/Master/Analisis de Fundamentos/R/Practica_1/")
 
 
 #df <- read.csv('~/máster/Practica_1/credit_risk_dataset.csv', header = TRUE)
@@ -135,7 +132,7 @@ df=df %>% rename(target=loan_amnt)
 ```
 
 
-Generamos dos data frame, uno para entrenamiento (train) y otro para validación (validation)
+Generamos dos dataframe, uno para entrenamiento (train) y otro para validación (validation)
 
 ```{r}
 #kk
@@ -166,7 +163,7 @@ dim(validacion)
 Antes de comenzar a analizar las variables definimos unas funciones en R para facilitar el código del análisis.
 
 Aunque hay multiples paquetes con resumenes estadísticos, generamos uno adaptado y así "jugamos" un poco con R.
-El matiz es que no encontramos ninguno que tenga el porcentaje de ceros por variab.
+El matiz es que no encontrabamos ninguno que tenga el porcentaje de ceros por variable.
 
 ```{r}
 
@@ -277,7 +274,7 @@ grafico_categoricas <-function(dataframe,variable,titulo,eje_y) {
 
 grafico_categoricas33 <-function(dataframe,variable) {
 
-      b3 <- (ggplot(df, aes({{variable}}, fill={{variable}}))
+      b3 <- (ggplot(dataframe, aes({{variable}}, fill={{variable}}))
            + geom_bar()
 
            + geom_text(
@@ -296,7 +293,11 @@ grafico_categoricas33 <-function(dataframe,variable) {
          vjust=0.5,
          accuracy = 1L
          
-         )
+         )+
+        theme(axis.text.x = element_text(angle = 60, vjust=0.5, size = 7), 
+        axis.text.y = element_text(angle = 0, vjust=0.5, size = 7),
+        panel.grid.minor = element_blank()
+    )
       )
       
       #return(b3)
@@ -372,6 +373,30 @@ test_normalidad <-function(df_var){
 ```
 
 
+
+```{r}
+grafico_train_val_num <-function(df1,df2,variable) {
+  
+  fill <- "lightblue"
+  line <- "darkblue"
+  
+  fill2 <- "lavenderblush2"
+  line2 <- "darkred"        
+        
+  ggplot() +
+          geom_density(data=df1,aes({{variable}}), fill = fill, colour = line,alpha=0.5) +
+          geom_vline( size = 1, colour = "#FF3721",linetype = "dashed")+
+         theme(plot.title = element_text(hjust = 0.2))+
+    
+          geom_density(data=df2,aes({{variable}}), fill = fill2, colour = line2,alpha=0.5) +
+          geom_vline( size = 1, colour = "#FF3721",linetype = "dashed")+
+         theme(plot.title = element_text(hjust = 0.2)) 
+}
+
+
+```
+
+
 ## Análisis univariante
 
 
@@ -409,7 +434,7 @@ des2=describe_v2(train,target)
 ```
 
 
-Se aprecia que no es una variable normal y tendremos que hacer una transformación.
+Se aprecia que no es una variable normal y tendremos que hacer una transformación. Se aprecian picos en las cifras de múltiplos de 5.000
 
 
 ### Variables independientes numéricas 
@@ -444,6 +469,15 @@ des2=describe_v2(train,person_age)
   des2 %>%
   kbl() %>%
   kable_styling()
+```
+
+
+Normalmente las políticas de las entidades bancarias restringen los prestamos personales a paritr de una edad, algo lógico para garantizarse que se lo van a pagar. Normalmente esa edad ronda entre los 70 y 75 años, siempre puede haber excepciones. Para nuestro caso consideramos que son datos erróneos y vamos a eliminarlos; también se podría barajar la opción de declararlos como valores missing y luego hacer una imputación de la media, pero dado que tenemos una muestra de información suficiente, se toma la decisión de eliminarlos.
+
+```{r}
+train %>% filter( person_age>75) %>%
+        kbl() %>%
+        kable_styling()
 ```
 
 
@@ -483,9 +517,15 @@ test_normalidad(train$person_income)
 ```
 
 
+Vemos que hay muchos casos con ingresos altos en la cola derecha, lo que hará que si no los corregimos y entra esta variable en el modelo son candidatos a ser puntos influyentes.
+
 ```{r}
-train %>% filter( person_income>1000000)
+train %>% filter( person_income>600000) %>%
+        kbl() %>%
+        kable_styling()
+
 ```
+
 
 Se aprecia que no es una variable normal y tendremos que hacer una transformación. También que hay un registro con una ingreso descomunal y que tiene una edad errónea, se eliminará el registro.
 
@@ -646,14 +686,7 @@ grafico_categoricas_biv2(train,cb_person_default_on_file)
 
 
 
-```{r, warning=FALSE}
-
-#ggpairs(train, lower = list(continuous = "smooth"),
-#        diag = list(continuous = "barDiag"), axisLabels = "none")
-```
-
-
-Sccater plot entre la variable dependiente, target y las independientes numéricas para ver relaciones
+Scatter plot entre la variable dependiente, target y las independientes numéricas para ver relaciones
 
 
 ```{r, warning=FALSE}
@@ -678,13 +711,17 @@ plot_grid(bi1, bi2,bi3,bi4)
 
 
 
-A coninutación, se procede a realiazar la depuración que hemos visto en el EDA:
+## Depuración de EDA  
 
-Eliminación del registro erróneo, que tiene unos ingresos por persona de 6.000.000 y 144 años
+
+A coninutación, se procede a realizar la depuración que hemos visto en el EDA:
+
+
+Comentamos de eliminar el registro erróneo, que tiene unos ingresos por persona de 6.000.000 y 144 años y este registro está incluido en el filtro de de eliminar registros mayores de 75 años:
 
 ```{r}
 dim(train)
-train <- train %>% filter(person_income< 6000000)
+train <- train %>% filter(person_age<=75)
 dim(train)
 ```
 
@@ -725,6 +762,9 @@ train$person_home_ownership[train$person_home_ownership=="OTHER"] <-"RENT"
 table(train$person_home_ownership)
 
 ```
+
+
+
 Para la variable lapso de tiempo desde el anterior préstamo parece qe tiene escalones por lo que decidimos discretizar variable.
  
 
@@ -732,11 +772,17 @@ Para la variable lapso de tiempo desde el anterior préstamo parece qe tiene esc
 train$cb_person_cred_hist_length_cat <- cut(train$cb_person_cred_hist_length,c(0,4,10,Inf),
                                             labels = c("0-4", "5-10", "Más de 10") )
 
-#table(train$cb_person_cred_hist_length_cat)
-str(train$cb_person_cred_hist_length_cat)
+train %>% 
+      group_by(cb_person_cred_hist_length_cat) %>%
+        summarise (n=n(),"%"=n/nrow(train)*100) %>%
+        arrange (n)
+```
 
-kable(train %>% group_by(cb_person_cred_hist_length_cat) %>% 
-        summarise(`Frecuencia relativa` = n()/nrow(train)*100,`d` = n()))
+
+```{r }
+train %>% 
+      group_by(cb_person_cred_hist_length_cat) %>%
+        summarise (n=n(),"%"=n/nrow(train)*100) 
 ```
 
 
@@ -744,7 +790,7 @@ kable(train %>% group_by(cb_person_cred_hist_length_cat) %>%
 ## Detección e imputación de datos faltantes
 
 
-En el EDA ya hemos visto los missing que tenemos para cada una de nuestras variables, ahora haremos un gráfico para ver recopilar que variables tienen missing y si hay alguna relación entre los registro que tienen missing, por si se concentran en casos concretos.
+En el EDA ya hemos visto los missing que tenemos para cada una de nuestras variables, ahora haremos un gráfico para recopilar que variables tienen missing y si hay alguna relación entre los registroS que tienen missing, por si se concentran en casos concretos.
 En clase se planteo hacer este paso antes, pero no sé hizo de esa forma porque quería hacer las imputaciones de las variables con los percentiles 99 sin tener en cuenta los valores imputados de los missing
 
 
@@ -779,7 +825,9 @@ df_train_missing <-train %>%
 
 
 
-Como solución parcial imputaremos el valor de la mediana siendo conscientes que no es la mejor solución.
+Como solución imputaremos el valor de la mediana a los missig siendo conscientes que no es la mejor solución. En aquellas variables que haya muchos missing puede modificar la distribución. En nuestro caso sí que podría afectar a la variable loan_int_rate que tiene un 9,8% de missing pero no en loan_int_rate, 2,9%.
+
+Una opción de mejora en este caso es utilizar el paquete MICE de R, que dispone de las imputaciones clásicas de media y mediana y la posibilidad de imputar con métodos de regresión estocástica y multiple. 
 
 ```{r}
 
@@ -792,17 +840,29 @@ train$loan_int_rate[is.na(train$loan_int_rate)] <-median(train$loan_int_rate, na
 ```
 
 Comprobación rápida que ya no tenemos missing
+
 ```{r}
-apply(is.na(train),2,FUN="mean")*100
+
+apply(is.na(train),2,FUN="mean")*100 
 
 ```
 
-https://cran.r-project.org/web/packages/simputation/vignettes/intro.html
+
 
 ```{r}
+algoritmo_imputacion = mice(train, m = 5, method = "pmm", seed = 300, printFlag = FALSE)
+train <- complete(algoritmo_imputacion)
+validacion <- complete(algoritmo_imputacion)
+```
+```{r}
+dim(train)
+dim(validacion)
+```
 
 
 
+```{r}
+apply(is.na(train),2,FUN="mean")*100
 ```
 
 
@@ -835,7 +895,7 @@ Utilizamos la librería bestNormalize que nos da la opción de sacar multiples t
 
 En este caso la mejor es orderNorm (The Ordered Quantile technique), aunque la de Box Cox que era la que se barajaba en un principio es muy similar. 
 
-Lunción orderNorm hace una normalización de cuantil ordenado (ORQ) que utiliza un mapeo de rango de los datos observados a la distribución normal para garantizar una distribución transformada normal (si los lazos no están presentes). La normalización ORQ funciona de manera muy consistente
+La función orderNorm hace una normalización de cuantil ordenado (ORQ) que utiliza un mapeo de rango de los datos observados a la distribución normal para garantizar una distribución transformada normal (si los lazos no están presentes). La normalización ORQ funciona de manera muy consistente
 a través de diferentes distribuciones, normalizando con éxito datos sesgados a la izquierda o a la derecha, datos multimodales.
 
 
@@ -881,6 +941,7 @@ train$person_age_tr <- orderNorm_obj_age$x
     (boxcox_obj_in <- boxcox(train$person_income))
     (yeojohnson_obj_in <- yeojohnson(train$person_income))
     (orderNorm_obj_in <- orderNorm(train$person_income))
+
      (BNobject_in <- bestNormalize(train$person_income)) 
   
 
@@ -939,7 +1000,7 @@ train$person_emp_length_tr <- sqrt_x_object_len$x
 
 
 
-
+Vemos de nuevo las relaciones entre el target y as variables numéricas una vez transformadas:
 
 
 ```{r, warning=FALSE}
@@ -976,16 +1037,26 @@ corr_matrix <- train %>% select_if(is.numeric) %>%
   select(-c(loan_status,loan_percent_income)) %>%
   cor(method="pearson", use="pairwise.complete.obs")
 
-
+library('corrplot')
 ```
 
-
-```{r,warning=FALSE}
-#square
-corrplot(corr_matrix, method = "square", shade.col = NA, tl.col = "black",
-         tl.srt = 35,  addCoef.col = "black", addcolorlabel = "no",
-         order = "hclust", type = "upper", diag = F, addshade = "all")
+```{r}
+ 
+# Gráfico de correlación con color y correlación MIC
+corrplot(corr_matrix, 
+         method="color",
+         type="lower", 
+         number.cex=0.7,
+         # Agregar coeficiente de correlación
+         addCoef.col = "black", 
+         tl.col="red", 
+         tl.srt=90, 
+         tl.cex = 0.9,
+         diag=FALSE, 
+         is.corr = F 
+)
 ```
+
 
 Se obserava las correlaciones de valor 1 de las variables transformadas con las de su origen, también destaca la edad y el lapso de tiempo desde que pediste el último crédito, lógica y además esta última variable la hemos discretizado por lo que no se usará la numérica y por otro lado la más interesante nuestra variable target, importe de préstamo, con los ingresos de la persona que le dán el crédito.
 
@@ -994,7 +1065,7 @@ Se obserava las correlaciones de valor 1 de las variables transformadas con las 
 
 ## Regresión simple
 
-Primero haremos una regresión simple con la variable de mayor correlación con la variable dependiente (target ~  ingresos):
+Primero haremos una regresión simple con la variable de mayor correlación con la variable dependiente (target_tr ~  ingresos_tr):
 
 ```{r}
 lm_fit <- lm(target_tr~person_income_tr, data=train)
@@ -1140,7 +1211,7 @@ Como el p-valor es pequeño entonces hay evidencias para rechazar la hipótesis 
 ```{r}
 # Detección y visualización de observaciones influyentes
 
-influencePlot(modelo_final)
+#influencePlot(modelo_final)
 
 ```
 ¿Hay colinealidad?
@@ -1205,13 +1276,13 @@ Transformaciones de variables para que sigan la hipótesis de normalidad de los 
 ```{r}
 
 (orderNorm_obj_age_val <- orderNorm(validacion$person_age))
-train$person_age_tr <- orderNorm_obj_age_val$x
+validacion$person_age_tr <- orderNorm_obj_age_val$x
 
 (orderNorm_obj_in_val <- orderNorm(validacion$person_income))
-train$person_income_tr <- orderNorm_obj_in_val$x
+validacion$person_income_tr <- orderNorm_obj_in_val$x
 
 (sqrt_x_object_len_val <- sqrt_x(validacion$person_emp_length))
-train$person_emp_length_tr <- sqrt_x_object_len_val$x
+validacion$person_emp_length_tr <- sqrt_x_object_len_val$x
 ```
 
 
@@ -1229,9 +1300,7 @@ Lo ideal es poner gráficos superpuestos....para ver mejor los cambios e incluir
 
 
 ```{r}
-G2_val=grafico_numerico(validacion,person_age)
-G2
-
+grafico_train_val_num(train,validacion,cb_person_cred_hist_length)
 ```
 
 
@@ -1240,9 +1309,8 @@ G2
 
 
 ```{r}
-G3_val=grafico_numerico(validacion,person_income)
-G3
 
+grafico_train_val_num(train,validacion,person_income)
 ```
 
 
@@ -1251,9 +1319,7 @@ G3
 
 
 ```{r, warning=FALSE}
-G4_val=grafico_numerico(validacion,person_emp_length)
-G4
-
+grafico_train_val_num(train,validacion,person_emp_length)
 ```
 
 
@@ -1261,9 +1327,8 @@ G4
 **Tasa de interés (loan_int_rate)**
 
 ```{r, warning=FALSE}
-G5_val=grafico_numerico(validacion,loan_int_rate)
-G5
 
+grafico_train_val_num(train,validacion,loan_int_rate)
 ```
 
 
@@ -1271,12 +1336,9 @@ G5
 
 
 ```{r}
-G6_val=grafico_numerico(validacion,cb_person_cred_hist_length)
-G6
 
+grafico_train_val_num(train,validacion,cb_person_cred_hist_length)
 ```
-
-
 
 **Relación con la propiedad de la vivienda (person_home_ownership)**
 
@@ -1284,6 +1346,7 @@ G6
 ```{r, warning=FALSE}
 a2_val=grafico_categoricas33(validacion,person_home_ownership)
 a2
+a2_val
 ```
 
 
@@ -1295,6 +1358,7 @@ El valor infrecuente de OTHER se le asignará el valor más frecuente RENT.
 ```{r, warning=FALSE}
 a3_val=grafico_categoricas33(validacion,loan_intent)
 a3
+a3_val
 ```
 
 
@@ -1305,7 +1369,9 @@ a3
 ```{r, warning=FALSE}
 a4_val=grafico_categoricas33(validacion,cb_person_default_on_file)
 a4
+a4_val
 ```
+
 
 
 
@@ -1357,7 +1423,7 @@ https://rpubs.com/Cristina_Gil/Regresion_Lineal_Multiple
 
 
 
-# Versiones de los paquetes de R
+# Versiones y paquetes instalados de R
 
 ```{r}
  sesion_info <- devtools::session_info()
@@ -1370,3 +1436,7 @@ dplyr::select(
 
 
 
+Versión de R:
+```{r include=TRUE}
+version
+```
